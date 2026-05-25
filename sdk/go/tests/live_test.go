@@ -1,0 +1,158 @@
+package tests
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	pgapp "github.com/zekee/pgapp/sdk/go/pgapp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+func TestLiveGoSDKCacheAndMQ(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	client, err := pgapp.Dial(context.Background(), endpoint, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := time.Now().UnixNano()
+	namespace := fmt.Sprintf("go_sdk_cache_%d", suffix)
+	queue := fmt.Sprintf("go_sdk_orders_%d", suffix)
+
+	ok, err := client.Cache().Set(context.Background(), namespace, "hello", []byte("world"), 60)
+	if err != nil || !ok {
+		t.Fatalf("cache set failed: ok=%v err=%v", ok, err)
+	}
+	value, hit, err := client.Cache().Get(context.Background(), namespace, "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hit || string(value) != "world" {
+		t.Fatalf("unexpected cache response hit=%v value=%q", hit, value)
+	}
+
+	ok, err = client.MQ().CreateQueue(context.Background(), queue)
+	if err != nil || !ok {
+		t.Fatalf("create queue failed: ok=%v err=%v", ok, err)
+	}
+	messageID, err := client.MQ().SendJSON(context.Background(), queue, map[string]bool{"ok": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, err := client.MQ().Read(context.Background(), queue, 1, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 || messages[0].MessageId != messageID {
+		t.Fatalf("unexpected messages: %#v", messages)
+	}
+	ok, err = client.MQ().Delete(context.Background(), queue, messageID)
+	if err != nil || !ok {
+		t.Fatalf("delete failed: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestLiveGoSDKExposesPhaseOneSurface(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	client, err := pgapp.Dial(context.Background(), endpoint, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := time.Now().UnixNano()
+	namespace := fmt.Sprintf("go_sdk_surface_cache_%d", suffix)
+	queue := fmt.Sprintf("go_sdk_surface_orders_%d", suffix)
+
+	ok, err := client.Cache().Set(context.Background(), namespace, "a", []byte("one"), 60)
+	if err != nil || !ok {
+		t.Fatalf("cache set failed: ok=%v err=%v", ok, err)
+	}
+	ok, err = client.Cache().Set(context.Background(), namespace, "b", []byte("two"), 60)
+	if err != nil || !ok {
+		t.Fatalf("cache set failed: ok=%v err=%v", ok, err)
+	}
+	items, err := client.Cache().MGet(context.Background(), namespace, []string{"a", "missing"})
+	if err != nil || len(items) != 2 {
+		t.Fatalf("unexpected mget: items=%#v err=%v", items, err)
+	}
+	exists, err := client.Cache().Exists(context.Background(), namespace, "a")
+	if err != nil || !exists {
+		t.Fatalf("exists failed: exists=%v err=%v", exists, err)
+	}
+	ok, err = client.Cache().Delete(context.Background(), namespace, "b")
+	if err != nil || !ok {
+		t.Fatalf("delete failed: ok=%v err=%v", ok, err)
+	}
+	ok, err = client.Cache().InvalidateNamespace(context.Background(), namespace)
+	if err != nil || !ok {
+		t.Fatalf("invalidate namespace failed: ok=%v err=%v", ok, err)
+	}
+	cacheStats, err := client.Cache().Stats(context.Background())
+	if err != nil || cacheStats.Writes < 2 {
+		t.Fatalf("unexpected cache stats: stats=%#v err=%v", cacheStats, err)
+	}
+
+	ok, err = client.MQ().CreateQueue(context.Background(), queue)
+	if err != nil || !ok {
+		t.Fatalf("create queue failed: ok=%v err=%v", ok, err)
+	}
+	ids, err := client.MQ().SendBatchJSON(context.Background(), queue, []interface{}{
+		map[string]int{"n": 1},
+		map[string]int{"n": 2},
+	}, 0)
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("unexpected send batch: ids=%#v err=%v", ids, err)
+	}
+	messages, err := client.MQ().ReadWithPoll(context.Background(), queue, 1, 30, 1, 25)
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("unexpected long poll: messages=%#v err=%v", messages, err)
+	}
+	ok, err = client.MQ().SetVisibilityTimeout(context.Background(), queue, messages[0].MessageId, 0)
+	if err != nil || !ok {
+		t.Fatalf("set vt failed: ok=%v err=%v", ok, err)
+	}
+	ok, err = client.MQ().Archive(context.Background(), queue, messages[0].MessageId)
+	if err != nil || !ok {
+		t.Fatalf("archive failed: ok=%v err=%v", ok, err)
+	}
+	mqStats, err := client.MQ().Metrics(context.Background(), queue)
+	if err != nil || mqStats.ArchivedMessageCount != 1 {
+		t.Fatalf("unexpected mq metrics: metrics=%#v err=%v", mqStats, err)
+	}
+	ok, err = client.MQ().PurgeQueue(context.Background(), queue)
+	if err != nil || !ok {
+		t.Fatalf("purge failed: ok=%v err=%v", ok, err)
+	}
+	ok, err = client.MQ().DropQueue(context.Background(), queue)
+	if err != nil || !ok {
+		t.Fatalf("drop failed: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestLiveGoSDKPreservesErrorStatus(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	client, err := pgapp.Dial(context.Background(), endpoint, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Cache().Set(context.Background(), "bad namespace", "key", []byte("value"), 60)
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
+	}
+}
+
+func liveEndpoint(t *testing.T) string {
+	t.Helper()
+	endpoint := getenv("PGAPP_TEST_ENDPOINT")
+	if endpoint == "" {
+		t.Skip("PGAPP_TEST_ENDPOINT is not set")
+	}
+	return endpoint
+}
+
+func getenv(key string) string {
+	return envLookup(key)
+}

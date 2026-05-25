@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package pgapp.v1;
+
+option go_package = "github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1";
+
+import "pgapp/v1/common.proto";
+
+service CacheService {
+  rpc Set(SetCacheRequest) returns (OperationResult);
+  rpc Get(GetCacheRequest) returns (GetCacheResponse);
+  rpc MGet(MGetCacheRequest) returns (MGetCacheResponse);
+  rpc Delete(DeleteCacheRequest) returns (OperationResult);
+  rpc Exists(ExistsCacheRequest) returns (ExistsCacheResponse);
+  rpc InvalidateNamespace(InvalidateNamespaceRequest) returns (OperationResult);
+  rpc Stats(CacheStatsRequest) returns (CacheStatsResponse);
+}
+
+message SetCacheRequest {
+  string namespace = 1;
+  string key = 2;
+  bytes value = 3;
+  int64 ttl_seconds = 4;
+}
+
+message GetCacheRequest {
+  string namespace = 1;
+  string key = 2;
+}
+
+message GetCacheResponse {
+  bool hit = 1;
+  bytes value = 2;
+}
+
+message MGetCacheRequest {
+  string namespace = 1;
+  repeated string keys = 2;
+}
+
+message CacheItem {
+  string key = 1;
+  bool hit = 2;
+  bytes value = 3;
+}
+
+message MGetCacheResponse {
+  repeated CacheItem items = 1;
+}
+
+message DeleteCacheRequest {
+  string namespace = 1;
+  string key = 2;
+}
+
+message ExistsCacheRequest {
+  string namespace = 1;
+  string key = 2;
+}
+
+message ExistsCacheResponse {
+  bool exists = 1;
+}
+
+message InvalidateNamespaceRequest {
+  string namespace = 1;
+}
+
+message CacheStatsRequest {}
+
+message NamespaceUsage {
+  string namespace = 1;
+  int64 key_count = 2;
+  int64 byte_size = 3;
+}
+
+message CacheStatsResponse {
+  int64 hits = 1;
+  int64 misses = 2;
+  int64 writes = 3;
+  int64 deletes = 4;
+  int64 evictions = 5;
+  int64 expired_removals = 6;
+  int64 logical_key_count = 7;
+  int64 logical_byte_size = 8;
+  repeated NamespaceUsage namespace_usage = 9;
+}

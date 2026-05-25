@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package pgapp.v1;
+
+option go_package = "github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1";
+
+import "pgapp/v1/common.proto";
+
+service HealthService {
+  rpc GetHealth(HealthRequest) returns (HealthResponse);
+  rpc GetReadiness(ReadinessRequest) returns (ReadinessResponse);
+  rpc GetRuntimeMetrics(RuntimeMetricsRequest) returns (RuntimeMetricsResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool live = 1;
+}
+
+message ReadinessRequest {}
+
+message ReadinessResponse {
+  bool ready = 1;
+  repeated ServiceCapability capabilities = 2;
+}
+
+message RuntimeMetricsRequest {}
+
+message MethodMetric {
+  string service = 1;
+  string method = 2;
+  string status = 3;
+  uint64 count = 4;
+  uint64 errors = 5;
+  uint64 total_latency_millis = 6;
+}
+
+message PgPoolMetrics {
+  uint32 size = 1;
+  uint32 idle = 2;
+}
+
+message RuntimeMetricsResponse {
+  repeated MethodMetric methods = 1;
+  PgPoolMetrics pg_pool = 2;
+}

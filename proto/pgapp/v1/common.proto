@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package pgapp.v1;
+
+option go_package = "github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1";
+
+message Empty {}
+
+message OperationResult {
+  bool success = 1;
+}
+
+enum ServiceState {
+  SERVICE_STATE_UNSPECIFIED = 0;
+  SERVICE_STATE_AVAILABLE = 1;
+  SERVICE_STATE_UNAVAILABLE = 2;
+  SERVICE_STATE_DISABLED = 3;
+}
+
+message ServiceCapability {
+  string name = 1;
+  ServiceState state = 2;
+  string message = 3;
+}

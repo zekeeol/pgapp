@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pgapp-sdk"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "grpcio>=1.80.0",
+  "protobuf>=6.33.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "grpcio-tools>=1.80.0",
+  "mypy>=2.1.0",
+  "types-grpcio>=1.0.0",
+]

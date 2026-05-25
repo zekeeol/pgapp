@@ -1,0 +1,9 @@
+/target/
+/.env
+/.venv/
+/.codex/
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/

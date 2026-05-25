@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package pgapp.v1;
+
+option go_package = "github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1";
+
+import "pgapp/v1/common.proto";
+
+service MQService {
+  rpc CreateQueue(CreateQueueRequest) returns (OperationResult);
+  rpc PurgeQueue(PurgeQueueRequest) returns (OperationResult);
+  rpc DropQueue(DropQueueRequest) returns (OperationResult);
+  rpc Send(SendMessageRequest) returns (SendMessageResponse);
+  rpc SendBatch(SendBatchRequest) returns (SendBatchResponse);
+  rpc Read(ReadMessagesRequest) returns (ReadMessagesResponse);
+  rpc ReadWithPoll(ReadWithPollRequest) returns (ReadMessagesResponse);
+  rpc Delete(DeleteMessageRequest) returns (OperationResult);
+  rpc Archive(ArchiveMessageRequest) returns (OperationResult);
+  rpc SetVisibilityTimeout(SetVisibilityTimeoutRequest) returns (OperationResult);
+  rpc Metrics(QueueMetricsRequest) returns (QueueMetricsResponse);
+}
+
+enum QueueStorageMode {
+  QUEUE_STORAGE_MODE_UNSPECIFIED = 0;
+  QUEUE_STORAGE_MODE_DURABLE = 1;
+  QUEUE_STORAGE_MODE_TRANSIENT = 2;
+}
+
+message CreateQueueRequest {
+  string queue_name = 1;
+  QueueStorageMode storage_mode = 2;
+}
+
+message PurgeQueueRequest {
+  string queue_name = 1;
+}
+
+message DropQueueRequest {
+  string queue_name = 1;
+}
+
+message SendMessageRequest {
+  string queue_name = 1;
+  string json_payload = 2;
+  int64 delay_seconds = 3;
+}
+
+message SendMessageResponse {
+  int64 message_id = 1;
+}
+
+message SendBatchRequest {
+  string queue_name = 1;
+  repeated string json_payloads = 2;
+  int64 delay_seconds = 3;
+}
+
+message SendBatchResponse {
+  repeated int64 message_ids = 1;
+}
+
+message ReadMessagesRequest {
+  string queue_name = 1;
+  int32 quantity = 2;
+  int64 visibility_timeout_seconds = 3;
+}
+
+message ReadWithPollRequest {
+  string queue_name = 1;
+  int32 quantity = 2;
+  int64 visibility_timeout_seconds = 3;
+  int64 max_poll_seconds = 4;
+  int64 poll_interval_millis = 5;
+}
+
+message QueueMessage {
+  int64 message_id = 1;
+  int32 read_count = 2;
+  string enqueued_at = 3;
+  string visibility_timeout_at = 4;
+  string json_payload = 5;
+}
+
+message ReadMessagesResponse {
+  repeated QueueMessage messages = 1;
+}
+
+message DeleteMessageRequest {
+  string queue_name = 1;
+  int64 message_id = 2;
+}
+
+message ArchiveMessageRequest {
+  string queue_name = 1;
+  int64 message_id = 2;
+}
+
+message SetVisibilityTimeoutRequest {
+  string queue_name = 1;
+  int64 message_id = 2;
+  int64 visibility_timeout_seconds = 3;
+}
+
+message QueueMetricsRequest {
+  string queue_name = 1;
+}
+
+message QueueMetricsResponse {
+  int64 visible_message_count = 1;
+  int64 in_flight_message_count = 2;
+  int64 oldest_visible_message_age_seconds = 3;
+  int64 archived_message_count = 4;
+}

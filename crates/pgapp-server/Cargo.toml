@@ -1,0 +1,15 @@
+[package]
+name = "pgapp-server"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+pgapp-core = { path = "../pgapp-core" }
+pgapp-proto = { path = "../pgapp-proto" }
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tonic.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

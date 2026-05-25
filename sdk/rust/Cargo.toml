@@ -1,0 +1,15 @@
+[package]
+name = "pgapp-sdk"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+pgapp-proto = { path = "../../crates/pgapp-proto" }
+serde_json.workspace = true
+tonic.workspace = true
+
+[dev-dependencies]
+pgapp-core = { path = "../../crates/pgapp-core" }
+pgapp-server = { path = "../../crates/pgapp-server" }
+tokio.workspace = true
