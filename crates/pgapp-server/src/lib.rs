@@ -1,5 +1,6 @@
 use pgapp_core::{
     PgAppError,
+    admin::AdminStore,
     cache::CacheStore,
     config::{RequestLimits, ServerConfig},
     db,
@@ -27,6 +28,8 @@ use std::{
 };
 use tonic::{Code, Request, Response, Status, transport::Server};
 
+mod admin_http;
+
 #[derive(Clone)]
 struct CacheGrpc {
     store: CacheStore,
@@ -53,7 +56,7 @@ struct HealthGrpc {
     request_timeout: Duration,
 }
 
-pub async fn run_from_env() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_from_env() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cfg = ServerConfig::from_env()?;
     let pool = db::connect(&cfg.database_url, cfg.min_connections, cfg.max_connections).await?;
     db::apply_schema(&pool).await?;
@@ -64,36 +67,38 @@ pub async fn serve(
     addr: SocketAddr,
     pool: sqlx::PgPool,
     cfg: ServerConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let metrics = MetricsRegistry::default();
     let request_limits = cfg.limits.clone();
     let request_timeout = cfg.default_request_timeout;
+    let cache_store = CacheStore::new(pool.clone(), cfg.cache_limits.clone());
+    let mq_store = MqStore::with_limits(
+        pool.clone(),
+        cfg.transient_queues_enabled,
+        MqLimits {
+            max_batch_size: cfg.limits.max_batch_size,
+            max_payload_bytes: cfg.limits.max_payload_bytes,
+            max_visibility_timeout_seconds: cfg.limits.max_visibility_timeout_seconds,
+        },
+    );
     let cache = CacheGrpc {
-        store: CacheStore::new(pool.clone(), cfg.cache_limits.clone()),
+        store: cache_store.clone(),
         enabled: cfg.services.cache,
         limits: request_limits.clone(),
         metrics: metrics.clone(),
         request_timeout,
     };
     let mq = MqGrpc {
-        store: MqStore::with_limits(
-            pool.clone(),
-            cfg.transient_queues_enabled,
-            MqLimits {
-                max_batch_size: cfg.limits.max_batch_size,
-                max_payload_bytes: cfg.limits.max_payload_bytes,
-                max_visibility_timeout_seconds: cfg.limits.max_visibility_timeout_seconds,
-            },
-        ),
+        store: mq_store,
         enabled: cfg.services.mq,
         metrics: metrics.clone(),
         request_timeout,
     };
     let health = HealthGrpc {
-        pool,
+        pool: pool.clone(),
         cache_enabled: cfg.services.cache,
         mq_enabled: cfg.services.mq,
-        metrics,
+        metrics: metrics.clone(),
         request_timeout,
     };
 
@@ -103,7 +108,31 @@ pub async fn serve(
         .add_service(MqServiceServer::new(mq));
 
     tracing::info!(%addr, "starting pgapp server");
-    router.serve(addr).await?;
+    let grpc = async move {
+        router
+            .serve(addr)
+            .await
+            .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> { Box::new(err) })
+    };
+    if cfg.admin.enabled {
+        let admin_state = admin_http::AdminHttpState {
+            pool: pool.clone(),
+            cache_store,
+            admin_store: AdminStore::new(pool, cfg.admin.max_page_size),
+            metrics,
+            cache_enabled: cfg.services.cache,
+            mq_enabled: cfg.services.mq,
+            token: cfg
+                .admin
+                .token
+                .clone()
+                .expect("admin token validated by config"),
+        };
+        let admin_addr = cfg.admin.bind_addr;
+        tokio::try_join!(grpc, admin_http::serve(admin_addr, admin_state))?;
+    } else {
+        grpc.await?;
+    }
     Ok(())
 }
 

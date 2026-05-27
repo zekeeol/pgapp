@@ -1,0 +1,9 @@
+/target/
+/.git/
+/.venv/
+/.codex/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+.DS_Store
+*.log

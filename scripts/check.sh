@@ -13,6 +13,7 @@ if [ -z "$PYTHON_BIN" ]; then
 fi
 
 cargo test --workspace
+(cd apps/admin-ui && npm ci && npm test && npm run build)
 scripts/generate-proto.sh
 (cd sdk/go && go test ./...)
 PYTHONPATH=sdk/python:sdk/python/pgapp_sdk/gen "$PYTHON_BIN" -m unittest discover -s sdk/python/tests

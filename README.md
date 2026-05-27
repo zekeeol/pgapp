@@ -18,12 +18,14 @@ pgapp-server
   - Cache service
   - MQ service
   - Health, readiness, runtime metrics
+  - Optional Admin HTTP API
         |
         | SQLx
         v
 PostgreSQL
   - cache_namespaces / cache_entries / cache_stats
   - mq_queues / mq_messages / mq_archives
+  - admin_log_events
 ```
 
 ## Features
@@ -35,34 +37,22 @@ PostgreSQL
   acknowledgement, visibility extension, and queue metrics.
 - Server runtime: configurable PostgreSQL pool, service toggles, request
   limits, default request timeout, health/readiness checks, and runtime metrics.
+- Admin UI: React + Vite read-only operations console with token-protected
+  Admin HTTP API, persisted PostgreSQL logs, Cache/MQ inspection, and client
+  activity views.
 - SDKs: idiomatic Rust, Go, and Python clients for the phase-one Cache and MQ
   APIs.
 
-## Local Deployment
+## Docker Compose Deployment
 
-If port `5432` is already in use, run PostgreSQL on `15432` and the gRPC server
-on `50051`:
+Run PostgreSQL, `pgapp-server`, and the Admin UI together:
 
 ```sh
-docker network create pgapp-local-net 2>/dev/null || true
-
-docker run --name pgapp-local-postgres \
-  --network pgapp-local-net \
-  -e POSTGRES_DB=pgapp \
-  -e POSTGRES_USER=pgapp \
-  -e POSTGRES_PASSWORD=secret \
-  -p 127.0.0.1:15432:5432 \
-  -d postgres:17
-
-docker build -t pgapp-server:local .
-
-docker run --name pgapp-local-server \
-  --network pgapp-local-net \
-  -e DATABASE_URL='postgres://pgapp:secret@pgapp-local-postgres:5432/pgapp' \
-  -e PGAPP_BIND_ADDR='0.0.0.0:50051' \
-  -p 127.0.0.1:50051:50051 \
-  -d pgapp-server:local
+PGAPP_ADMIN_TOKEN=change-me-local-admin-token docker-compose up -d --build
 ```
+
+The server applies the PostgreSQL schema on startup, initializing Cache, MQ, and
+Admin log tables.
 
 Client endpoint:
 
@@ -70,10 +60,33 @@ Client endpoint:
 127.0.0.1:50051
 ```
 
+Admin UI:
+
+```text
+http://127.0.0.1:3000
+```
+
+Admin API endpoint, also available directly:
+
+```text
+http://127.0.0.1:8080/api/admin
+```
+
 Database URL from the host:
 
 ```text
 postgres://pgapp:secret@127.0.0.1:15432/pgapp
+```
+
+If a port is already in use, override host ports:
+
+```sh
+PGAPP_POSTGRES_HOST_PORT=15433 \
+PGAPP_GRPC_HOST_PORT=50052 \
+PGAPP_ADMIN_HOST_PORT=8081 \
+PGAPP_ADMIN_UI_HOST_PORT=3001 \
+PGAPP_ADMIN_TOKEN=change-me-local-admin-token \
+docker-compose up -d --build
 ```
 
 See [docs/local-deployment.md](docs/local-deployment.md) for verification and
@@ -101,10 +114,30 @@ PGAPP_MAX_VISIBILITY_TIMEOUT_SECONDS=43200
 PGAPP_DEFAULT_TIMEOUT_SECONDS=30
 PGAPP_CACHE_MAX_KEYS=100000
 PGAPP_CACHE_MAX_BYTES=1073741824
+PGAPP_ENABLE_ADMIN=false
+PGAPP_ADMIN_BIND_ADDR=127.0.0.1:8080
+PGAPP_ADMIN_TOKEN=change-me
+PGAPP_ADMIN_MAX_PAGE_SIZE=100
 ```
 
 Omit `PGAPP_CACHE_MAX_KEYS` or `PGAPP_CACHE_MAX_BYTES` for unbounded logical
 cache limits.
+
+When `PGAPP_ENABLE_ADMIN=true`, `PGAPP_ADMIN_TOKEN` is required. The Admin API
+is read-only for Cache and MQ: it can inspect namespaces, entries, queues,
+messages, metrics, logs, and client activity, but it does not set/delete cache
+entries or send/delete/archive/purge/drop MQ messages.
+
+Run the Admin UI during development without Docker:
+
+```sh
+cd apps/admin-ui
+npm install
+npm run dev
+```
+
+See [docs/admin-ui.md](docs/admin-ui.md) for Admin API routes, log persistence,
+token handling, and read-only limitations.
 
 ## SDK Quick Start
 
@@ -215,6 +248,7 @@ openspec validate --specs --strict
 ## Documentation
 
 - [docs/local-deployment.md](docs/local-deployment.md)
+- [docs/admin-ui.md](docs/admin-ui.md)
 - [docs/mq-semantics.md](docs/mq-semantics.md)
 - [docs/limitations.md](docs/limitations.md)
 - [docs/schema-rollback.md](docs/schema-rollback.md)

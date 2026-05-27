@@ -4,6 +4,7 @@ use std::time::Duration;
 
 const CACHE_SCHEMA: &str = include_str!("../../../migrations/0001_cache.sql");
 const MQ_SCHEMA: &str = include_str!("../../../migrations/0002_mq.sql");
+const ADMIN_SCHEMA: &str = include_str!("../../../migrations/0003_admin.sql");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapabilityStatus {
@@ -25,6 +26,7 @@ pub async fn connect(database_url: &str, min: u32, max: u32) -> PgAppResult<PgPo
 pub async fn apply_schema(pool: &PgPool) -> PgAppResult<()> {
     pool.execute(CACHE_SCHEMA).await?;
     pool.execute(MQ_SCHEMA).await?;
+    pool.execute(ADMIN_SCHEMA).await?;
     Ok(())
 }
 

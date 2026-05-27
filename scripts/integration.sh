@@ -47,12 +47,19 @@ PG_PORT=$(docker port "$CONTAINER_NAME" 5432/tcp | sed 's/.*://')
 export DATABASE_URL="postgres://pgapp:secret@127.0.0.1:${PG_PORT}/pgapp"
 
 SERVER_PORT=$("$PYTHON_BIN" -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+ADMIN_PORT=$("$PYTHON_BIN" -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
 export PGAPP_BIND_ADDR="127.0.0.1:${SERVER_PORT}"
+export PGAPP_ADMIN_BIND_ADDR="127.0.0.1:${ADMIN_PORT}"
+export PGAPP_ENABLE_ADMIN=true
+export PGAPP_ADMIN_TOKEN="integration-admin-token"
 export PGAPP_TEST_ENDPOINT="127.0.0.1:${SERVER_PORT}"
 
 cargo build -p pgapp-server
 
 DATABASE_URL="$DATABASE_URL" PGAPP_BIND_ADDR="$PGAPP_BIND_ADDR" \
+  PGAPP_ENABLE_ADMIN="$PGAPP_ENABLE_ADMIN" \
+  PGAPP_ADMIN_BIND_ADDR="$PGAPP_ADMIN_BIND_ADDR" \
+  PGAPP_ADMIN_TOKEN="$PGAPP_ADMIN_TOKEN" \
   cargo run -p pgapp-server >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
@@ -74,6 +81,23 @@ if ! nc -z 127.0.0.1 "$SERVER_PORT" >/dev/null 2>&1; then
   exit 1
 fi
 
+for _ in $(seq 1 80); do
+  if nc -z 127.0.0.1 "$ADMIN_PORT" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.25
+done
+
+if ! nc -z 127.0.0.1 "$ADMIN_PORT" >/dev/null 2>&1; then
+  echo "Admin HTTP server did not become ready. Log:" >&2
+  cat "$SERVER_LOG" >&2
+  exit 1
+fi
+
+curl -fsS \
+  -H "Authorization: Bearer ${PGAPP_ADMIN_TOKEN}" \
+  "http://127.0.0.1:${ADMIN_PORT}/api/admin/overview" >/dev/null
+
 scripts/check.sh
 
-echo "Integration test passed with Docker PostgreSQL on port ${PG_PORT} and server on ${SERVER_PORT}."
+echo "Integration test passed with Docker PostgreSQL on port ${PG_PORT}, gRPC on ${SERVER_PORT}, and Admin HTTP on ${ADMIN_PORT}."

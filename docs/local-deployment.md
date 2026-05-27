@@ -1,44 +1,42 @@
 # Local Deployment
 
-This guide runs PGApp locally without taking over an existing PostgreSQL on
-port `5432`.
+This guide runs PGApp locally with Docker Compose. It starts PostgreSQL,
+`pgapp-server`, and the React Admin UI. The server initializes the PostgreSQL
+schema on startup.
 
 ## Ports
 
 - PostgreSQL container: `127.0.0.1:15432`
 - gRPC server: `127.0.0.1:50051`
+- Admin HTTP API: `127.0.0.1:8080`
+- Admin UI: `http://127.0.0.1:3000`
 
 ## Start
 
 ```sh
-docker network create pgapp-local-net 2>/dev/null || true
-
-docker run --name pgapp-local-postgres \
-  --network pgapp-local-net \
-  -e POSTGRES_DB=pgapp \
-  -e POSTGRES_USER=pgapp \
-  -e POSTGRES_PASSWORD=secret \
-  -p 127.0.0.1:15432:5432 \
-  -d postgres:17
-
-docker build -t pgapp-server:local .
-
-docker run --name pgapp-local-server \
-  --network pgapp-local-net \
-  -e DATABASE_URL='postgres://pgapp:secret@pgapp-local-postgres:5432/pgapp' \
-  -e PGAPP_BIND_ADDR='0.0.0.0:50051' \
-  -p 127.0.0.1:50051:50051 \
-  -d pgapp-server:local
+PGAPP_ADMIN_TOKEN=change-me-local-admin-token docker-compose up -d --build
 ```
 
-The server applies the Cache and MQ schema on startup.
+When default ports are busy, override only the host ports:
+
+```sh
+PGAPP_POSTGRES_HOST_PORT=15433 \
+PGAPP_GRPC_HOST_PORT=50052 \
+PGAPP_ADMIN_HOST_PORT=8081 \
+PGAPP_ADMIN_UI_HOST_PORT=3001 \
+PGAPP_ADMIN_TOKEN=change-me-local-admin-token \
+docker-compose up -d --build
+```
+
+Inside the compose network, PostgreSQL remains `postgres:5432`, gRPC remains
+`pgapp-server:50051`, and Admin HTTP remains `pgapp-server:8080`.
 
 ## Verify
 
 ```sh
-docker ps --filter name=pgapp-local
+docker-compose ps
 
-docker exec pgapp-local-postgres psql -U pgapp -d pgapp \
+docker exec pgapp-postgres-1 psql -U pgapp -d pgapp \
   -c "select table_name from information_schema.tables where table_schema='public' order by table_name;"
 
 PGAPP_TEST_ENDPOINT=127.0.0.1:50051 \
@@ -54,30 +52,40 @@ Expected tables:
 - `mq_archives`
 - `mq_messages`
 - `mq_queues`
+- `admin_log_events`
+
+Verify Admin HTTP:
+
+```sh
+curl -H 'Authorization: Bearer change-me-local-admin-token' \
+  http://127.0.0.1:8080/api/admin/overview
+```
+
+Open the Admin UI and enter `change-me-local-admin-token`:
+
+```text
+http://127.0.0.1:3000
+```
 
 ## Operate
 
 ```sh
-docker logs -f pgapp-local-server
-docker logs -f pgapp-local-postgres
+docker-compose logs -f pgapp-server
+docker-compose logs -f postgres
+docker-compose logs -f admin-ui
 
-docker stop pgapp-local-server pgapp-local-postgres
-docker start pgapp-local-postgres pgapp-local-server
+docker-compose stop
+docker-compose start
 ```
 
 ## Remove
 
 ```sh
-docker rm -f pgapp-local-server pgapp-local-postgres
-docker network rm pgapp-local-net
+docker-compose down
 ```
 
-This deletes the local PostgreSQL container and its data because the command
-does not attach a persistent volume. Add a named volume before using this setup
-for longer-lived local data.
+This keeps the named PostgreSQL volume. To delete local data too:
 
-## Docker Compose
-
-The repository also includes `docker-compose.yml`, but it maps PostgreSQL to
-host port `5432`. Use the manual commands above when another local PostgreSQL
-is already listening there.
+```sh
+docker-compose down -v
+```

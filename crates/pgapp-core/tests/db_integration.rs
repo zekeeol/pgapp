@@ -1,4 +1,5 @@
 use pgapp_core::{
+    admin::{AdminLogInput, AdminStore, ListQuery, LogFilter},
     cache::{CacheLimits, CacheStore},
     db,
     mq::{MqStore, QueueStorageMode},
@@ -44,6 +45,154 @@ async fn migrations_create_required_cache_and_mq_schema() {
     .await
     .unwrap();
     assert!(cache_indexes >= 3);
+}
+
+#[tokio::test]
+async fn admin_logs_are_persisted_and_filterable() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let store = AdminStore::new(pool, 100);
+    let request_id = unique("admin_req");
+
+    store
+        .record_log(AdminLogInput {
+            level: "INFO".to_string(),
+            target: "pgapp_server::admin".to_string(),
+            message: "admin console opened".to_string(),
+            request_id: Some(request_id.clone()),
+            fields: serde_json::json!({"path": "/api/admin/overview"}),
+        })
+        .await
+        .unwrap();
+
+    let logs = store
+        .list_logs(
+            LogFilter {
+                level: Some("INFO".to_string()),
+                text: Some("console".to_string()),
+                target: Some("admin".to_string()),
+            },
+            ListQuery {
+                limit: Some(10),
+                offset: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(logs.items.len(), 1);
+    assert_eq!(
+        logs.items[0].request_id.as_deref(),
+        Some(request_id.as_str())
+    );
+    assert_eq!(logs.items[0].fields["path"], "/api/admin/overview");
+}
+
+#[tokio::test]
+async fn admin_cache_inspection_is_paginated_and_read_only() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let namespace = unique("admin_cache");
+    let cache = CacheStore::new(pool.clone(), CacheLimits::default());
+    cache.set(&namespace, "a", b"one", None).await.unwrap();
+    cache.set(&namespace, "b", b"two", None).await.unwrap();
+
+    let before_access_count: i64 = sqlx::query_scalar(
+        "SELECT access_count FROM cache_entries WHERE namespace = $1 AND cache_key = 'a'",
+    )
+    .bind(&namespace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let mut stats_lock = pool.begin().await.unwrap();
+    let before_hits: i64 =
+        sqlx::query_scalar("SELECT hits FROM cache_stats WHERE singleton FOR UPDATE")
+            .fetch_one(&mut *stats_lock)
+            .await
+            .unwrap();
+
+    let admin = AdminStore::new(pool.clone(), 1);
+    let first_page = admin
+        .list_cache_entries(
+            Some(namespace.clone()),
+            ListQuery {
+                limit: Some(50),
+                offset: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(first_page.items.len(), 1);
+    assert_eq!(first_page.limit, 1);
+    assert_eq!(first_page.next_offset, Some(1));
+    assert_eq!(first_page.items[0].value_encoding, "hex");
+
+    let after_access_count: i64 = sqlx::query_scalar(
+        "SELECT access_count FROM cache_entries WHERE namespace = $1 AND cache_key = 'a'",
+    )
+    .bind(&namespace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let after_hits: i64 = sqlx::query_scalar("SELECT hits FROM cache_stats WHERE singleton")
+        .fetch_one(&mut *stats_lock)
+        .await
+        .unwrap();
+    stats_lock.commit().await.unwrap();
+
+    assert_eq!(after_access_count, before_access_count);
+    assert_eq!(after_hits, before_hits);
+}
+
+#[tokio::test]
+async fn admin_mq_previews_do_not_claim_delivery() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let queue = unique("admin_mq");
+    let mq = MqStore::new(pool.clone(), false);
+    mq.create_queue(&queue, QueueStorageMode::Durable)
+        .await
+        .unwrap();
+    let message_id = mq.send(&queue, r#"{"hello":"world"}"#, 0).await.unwrap();
+
+    let admin = AdminStore::new(pool.clone(), 100);
+    let messages = admin
+        .list_mq_messages(
+            &queue,
+            ListQuery {
+                limit: Some(10),
+                offset: 0,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(messages.items.len(), 1);
+    assert_eq!(messages.items[0].message_id, message_id);
+    assert_eq!(messages.items[0].read_count, 0);
+    assert!(messages.items[0].visibility_timeout_at.is_none());
+
+    let row: (
+        i32,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    ) = sqlx::query_as(
+        "SELECT read_count, visibility_timeout_at, last_read_at FROM mq_messages WHERE id = $1",
+    )
+    .bind(message_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, 0);
+    assert!(row.1.is_none());
+    assert!(row.2.is_none());
 }
 
 #[tokio::test]

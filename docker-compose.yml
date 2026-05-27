@@ -6,7 +6,9 @@ services:
       POSTGRES_USER: pgapp
       POSTGRES_PASSWORD: secret
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${PGAPP_POSTGRES_HOST_PORT:-15432}:5432"
+    volumes:
+      - pgapp-postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pgapp -d pgapp"]
       interval: 5s
@@ -20,8 +22,24 @@ services:
     environment:
       DATABASE_URL: postgres://pgapp:secret@postgres:5432/pgapp
       PGAPP_BIND_ADDR: 0.0.0.0:50051
+      PGAPP_ENABLE_ADMIN: "true"
+      PGAPP_ADMIN_BIND_ADDR: 0.0.0.0:8080
+      PGAPP_ADMIN_TOKEN: ${PGAPP_ADMIN_TOKEN:-change-me-local-admin-token}
     ports:
-      - "50051:50051"
+      - "127.0.0.1:${PGAPP_GRPC_HOST_PORT:-50051}:50051"
+      - "127.0.0.1:${PGAPP_ADMIN_HOST_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
+
+  admin-ui:
+    build:
+      context: apps/admin-ui
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${PGAPP_ADMIN_UI_HOST_PORT:-3000}:80"
+    depends_on:
+      - pgapp-server
+
+volumes:
+  pgapp-postgres-data:

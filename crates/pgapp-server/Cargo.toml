@@ -7,9 +7,16 @@ version.workspace = true
 [dependencies]
 pgapp-core = { path = "../pgapp-core" }
 pgapp-proto = { path = "../pgapp-proto" }
+axum.workspace = true
+chrono.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tonic.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true

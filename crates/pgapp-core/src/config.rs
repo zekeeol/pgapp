@@ -15,6 +15,14 @@ pub struct RequestLimits {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdminConfig {
+    pub enabled: bool,
+    pub bind_addr: SocketAddr,
+    pub token: Option<String>,
+    pub max_page_size: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
     pub database_url: String,
@@ -25,6 +33,7 @@ pub struct ServerConfig {
     pub cache_limits: CacheLimits,
     pub default_request_timeout: Duration,
     pub transient_queues_enabled: bool,
+    pub admin: AdminConfig,
 }
 
 impl ServerConfig {
@@ -46,6 +55,23 @@ impl ServerConfig {
                 "PGAPP_MIN_CONNECTIONS must be <= PGAPP_MAX_CONNECTIONS".to_string(),
             ));
         }
+
+        let admin_enabled = parse_bool(&map, "PGAPP_ENABLE_ADMIN", false)?;
+        let admin_bind_addr = optional(&map, "PGAPP_ADMIN_BIND_ADDR", "127.0.0.1:8080")
+            .parse()
+            .map_err(|err| {
+                PgAppError::InvalidArgument(format!("invalid PGAPP_ADMIN_BIND_ADDR: {err}"))
+            })?;
+        let admin_token = map
+            .get("PGAPP_ADMIN_TOKEN")
+            .filter(|value| !value.is_empty())
+            .cloned();
+        if admin_enabled && admin_token.is_none() {
+            return Err(PgAppError::InvalidArgument(
+                "PGAPP_ADMIN_TOKEN is required when PGAPP_ENABLE_ADMIN=true".to_string(),
+            ));
+        }
+        let admin_max_page_size = parse_positive_usize(&map, "PGAPP_ADMIN_MAX_PAGE_SIZE", 100)?;
 
         Ok(Self {
             bind_addr,
@@ -75,6 +101,12 @@ impl ServerConfig {
                 30,
             )?),
             transient_queues_enabled: parse_bool(&map, "PGAPP_ENABLE_TRANSIENT_QUEUES", false)?,
+            admin: AdminConfig {
+                enabled: admin_enabled,
+                bind_addr: admin_bind_addr,
+                token: admin_token,
+                max_page_size: admin_max_page_size,
+            },
         })
     }
 }
@@ -145,6 +177,20 @@ fn parse_usize(map: &HashMap<String, String>, key: &str, default: usize) -> PgAp
         .map_err(|err| PgAppError::InvalidArgument(format!("invalid {key}: {err}")))
 }
 
+fn parse_positive_usize(
+    map: &HashMap<String, String>,
+    key: &str,
+    default: usize,
+) -> PgAppResult<usize> {
+    let parsed = parse_usize(map, key, default)?;
+    if parsed == 0 {
+        return Err(PgAppError::InvalidArgument(format!(
+            "{key} must be positive"
+        )));
+    }
+    Ok(parsed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +209,9 @@ mod tests {
         assert!(cfg.services.cache);
         assert!(cfg.services.mq);
         assert_eq!(cfg.max_connections, 20);
+        assert!(!cfg.admin.enabled);
+        assert_eq!(cfg.admin.bind_addr.to_string(), "127.0.0.1:8080");
+        assert_eq!(cfg.admin.token, None);
     }
 
     #[test]
@@ -198,5 +247,46 @@ mod tests {
         assert_eq!(cfg.limits.max_visibility_timeout_seconds, 120);
         assert_eq!(cfg.cache_limits.max_keys, Some(1000));
         assert_eq!(cfg.cache_limits.max_bytes, Some(4096));
+    }
+
+    #[test]
+    fn loads_admin_configuration_when_enabled_with_token() {
+        let mut env = base();
+        env.insert("PGAPP_ENABLE_ADMIN".to_string(), "true".to_string());
+        env.insert(
+            "PGAPP_ADMIN_BIND_ADDR".to_string(),
+            "127.0.0.1:18080".to_string(),
+        );
+        env.insert("PGAPP_ADMIN_TOKEN".to_string(), "secret-token".to_string());
+        env.insert("PGAPP_ADMIN_MAX_PAGE_SIZE".to_string(), "250".to_string());
+
+        let cfg = ServerConfig::from_map(env).unwrap();
+
+        assert!(cfg.admin.enabled);
+        assert_eq!(cfg.admin.bind_addr.to_string(), "127.0.0.1:18080");
+        assert_eq!(cfg.admin.token.as_deref(), Some("secret-token"));
+        assert_eq!(cfg.admin.max_page_size, 250);
+    }
+
+    #[test]
+    fn rejects_enabled_admin_without_token() {
+        let mut env = base();
+        env.insert("PGAPP_ENABLE_ADMIN".to_string(), "true".to_string());
+
+        let err = ServerConfig::from_map(env).unwrap_err();
+
+        assert!(err.to_string().contains("PGAPP_ADMIN_TOKEN"));
+    }
+
+    #[test]
+    fn rejects_invalid_admin_page_size() {
+        let mut env = base();
+        env.insert("PGAPP_ENABLE_ADMIN".to_string(), "true".to_string());
+        env.insert("PGAPP_ADMIN_TOKEN".to_string(), "secret-token".to_string());
+        env.insert("PGAPP_ADMIN_MAX_PAGE_SIZE".to_string(), "0".to_string());
+
+        let err = ServerConfig::from_map(env).unwrap_err();
+
+        assert!(err.to_string().contains("PGAPP_ADMIN_MAX_PAGE_SIZE"));
     }
 }
