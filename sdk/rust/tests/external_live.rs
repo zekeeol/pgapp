@@ -50,7 +50,12 @@ async fn external_rust_sdk_cache_and_mq_round_trip() {
     let message_id = mq.send_json(&queue, &json!({"ok": true})).await.unwrap();
     let messages = mq.read(&queue, 1, 30).await.unwrap();
     assert_eq!(messages[0].message_id, message_id);
-    assert!(mq.delete(&queue, message_id).await.unwrap());
+    assert!(!messages[0].ack_token.is_empty());
+    assert!(
+        mq.ack(&queue, message_id, &messages[0].ack_token)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]

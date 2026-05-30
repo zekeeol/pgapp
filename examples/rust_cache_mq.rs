@@ -17,6 +17,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let message_id = mq.send_json("orders", &json!({"order_id": 123})).await?;
     let messages = mq.read("orders", 1, 30).await?;
     println!("sent {message_id}, read {} message(s)", messages.len());
+    if let Some(message) = messages.first() {
+        mq.ack("orders", message.message_id, &message.ack_token)
+            .await?;
+    }
 
     Ok(())
 }

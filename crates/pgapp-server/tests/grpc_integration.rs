@@ -1,8 +1,10 @@
 use pgapp_core::{config::ServerConfig, db};
 use pgapp_proto::pgapp::v1::{
-    CreateQueueRequest, GetCacheRequest, HealthRequest, QueueStorageMode, ReadMessagesRequest,
-    ReadinessRequest, RuntimeMetricsRequest, SendMessageRequest, SetCacheRequest,
-    cache_service_client::CacheServiceClient, health_service_client::HealthServiceClient,
+    AckMessageRequest, ConfigScope, CreateQueueRequest, GetCacheRequest, GetConfigReleaseRequest,
+    HealthRequest, PublishConfigRequest, QueueStorageMode, ReadMessagesRequest, ReadinessRequest,
+    RuntimeMetricsRequest, SendMessageRequest, SetCacheRequest, UpsertConfigItemRequest,
+    WatchConfigRequest, cache_service_client::CacheServiceClient,
+    config_service_client::ConfigServiceClient, health_service_client::HealthServiceClient,
     mq_service_client::MqServiceClient,
 };
 use std::{
@@ -68,7 +70,11 @@ async fn wait_for_server(endpoint: &str) -> Result<(), tonic::transport::Error> 
 
 fn unique(prefix: &str) -> String {
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-    format!("{prefix}_{id}")
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!("{prefix}_{id}_{nanos}")
 }
 
 #[tokio::test]
@@ -94,6 +100,12 @@ async fn health_readiness_reports_enabled_capabilities() {
     assert!(readiness.ready);
     assert!(readiness.capabilities.iter().any(|cap| cap.name == "cache"));
     assert!(readiness.capabilities.iter().any(|cap| cap.name == "mq"));
+    assert!(
+        readiness
+            .capabilities
+            .iter()
+            .any(|cap| cap.name == "config")
+    );
 }
 
 #[tokio::test]
@@ -126,7 +138,7 @@ async fn cache_grpc_round_trip() {
 }
 
 #[tokio::test]
-async fn mq_grpc_send_read_delete() {
+async fn mq_grpc_send_read_ack() {
     let Some(endpoint) = spawn_server(true, true).await else {
         eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
         return;
@@ -151,7 +163,7 @@ async fn mq_grpc_send_read_delete() {
         .into_inner();
     let read = client
         .read(ReadMessagesRequest {
-            queue_name: queue,
+            queue_name: queue.clone(),
             quantity: 1,
             visibility_timeout_seconds: 30,
         })
@@ -160,6 +172,130 @@ async fn mq_grpc_send_read_delete() {
         .into_inner();
     assert_eq!(read.messages.len(), 1);
     assert_eq!(read.messages[0].message_id, sent.message_id);
+    assert!(!read.messages[0].ack_token.is_empty());
+
+    let ack = client
+        .ack(AckMessageRequest {
+            queue_name: queue,
+            message_id: sent.message_id,
+            ack_token: read.messages[0].ack_token.clone(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(ack.success);
+}
+
+#[tokio::test]
+async fn config_grpc_publish_read_and_watch() {
+    let Some(endpoint) = spawn_server(true, true).await else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut client = ConfigServiceClient::connect(endpoint.clone())
+        .await
+        .unwrap();
+    let scope = ConfigScope {
+        app_id: unique("grpc_config"),
+        environment: "prod".to_string(),
+        cluster: "default".to_string(),
+        namespace: "application".to_string(),
+    };
+
+    client
+        .upsert_item(UpsertConfigItemRequest {
+            scope: Some(scope.clone()),
+            key: "feature_flags".to_string(),
+            json_value: r#"{"enabled":true}"#.to_string(),
+        })
+        .await
+        .unwrap();
+    let release = client
+        .publish(PublishConfigRequest {
+            scope: Some(scope.clone()),
+            message: "initial".to_string(),
+            published_by: "grpc-test".to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(release.revision, 1);
+    assert!(release.snapshot_json.contains("feature_flags"));
+
+    client
+        .upsert_item(UpsertConfigItemRequest {
+            scope: Some(scope.clone()),
+            key: "feature_flags".to_string(),
+            json_value: r#"{"enabled":false}"#.to_string(),
+        })
+        .await
+        .unwrap();
+    let latest = client
+        .get_release(GetConfigReleaseRequest {
+            scope: Some(scope.clone()),
+            revision: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(latest.revision, 1);
+    assert!(latest.snapshot_json.contains(r#""enabled":true"#));
+
+    let watch = client
+        .watch(WatchConfigRequest {
+            scope: Some(scope),
+            known_revision: 0,
+            timeout_seconds: 1,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(watch.changed);
+    assert_eq!(watch.latest_revision, 1);
+
+    let mut health = HealthServiceClient::connect(endpoint).await.unwrap();
+    let metrics = health
+        .get_runtime_metrics(RuntimeMetricsRequest {})
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(
+        metrics
+            .methods
+            .iter()
+            .any(|metric| metric.service == "config"
+                && metric.method == "publish"
+                && metric.status == "ok"
+                && metric.count >= 1)
+    );
+}
+
+#[tokio::test]
+async fn disabled_config_rejects_calls() {
+    let Some(endpoint) = spawn_server_with_env(
+        true,
+        true,
+        HashMap::from([("PGAPP_ENABLE_CONFIG".to_string(), "false".to_string())]),
+    )
+    .await
+    else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut client = ConfigServiceClient::connect(endpoint).await.unwrap();
+    let err = client
+        .get_release(GetConfigReleaseRequest {
+            scope: Some(ConfigScope {
+                app_id: unique("disabled_config"),
+                environment: "prod".to_string(),
+                cluster: "default".to_string(),
+                namespace: "application".to_string(),
+            }),
+            revision: 0,
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::Unavailable);
 }
 
 #[tokio::test]

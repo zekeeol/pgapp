@@ -14,7 +14,7 @@ service MQService {
   rpc SendBatch(SendBatchRequest) returns (SendBatchResponse);
   rpc Read(ReadMessagesRequest) returns (ReadMessagesResponse);
   rpc ReadWithPoll(ReadWithPollRequest) returns (ReadMessagesResponse);
-  rpc Delete(DeleteMessageRequest) returns (OperationResult);
+  rpc Ack(AckMessageRequest) returns (OperationResult);
   rpc Archive(ArchiveMessageRequest) returns (OperationResult);
   rpc SetVisibilityTimeout(SetVisibilityTimeoutRequest) returns (OperationResult);
   rpc Metrics(QueueMetricsRequest) returns (QueueMetricsResponse);
@@ -79,26 +79,30 @@ message QueueMessage {
   string enqueued_at = 3;
   string visibility_timeout_at = 4;
   string json_payload = 5;
+  string ack_token = 6;
 }
 
 message ReadMessagesResponse {
   repeated QueueMessage messages = 1;
 }
 
-message DeleteMessageRequest {
+message AckMessageRequest {
   string queue_name = 1;
   int64 message_id = 2;
+  string ack_token = 3;
 }
 
 message ArchiveMessageRequest {
   string queue_name = 1;
   int64 message_id = 2;
+  string ack_token = 3;
 }
 
 message SetVisibilityTimeoutRequest {
   string queue_name = 1;
   int64 message_id = 2;
   int64 visibility_timeout_seconds = 3;
+  string ack_token = 4;
 }
 
 message QueueMetricsRequest {

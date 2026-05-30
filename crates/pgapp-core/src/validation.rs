@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 
 const MAX_IDENTIFIER_LEN: usize = 128;
 const MAX_CACHE_KEY_LEN: usize = 1024;
+const MAX_CONFIG_KEY_LEN: usize = 256;
 
 pub fn validate_namespace(namespace: &str) -> PgAppResult<()> {
     validate_identifier("namespace", namespace)
@@ -11,6 +12,19 @@ pub fn validate_namespace(namespace: &str) -> PgAppResult<()> {
 
 pub fn validate_queue_name(queue_name: &str) -> PgAppResult<()> {
     validate_identifier("queue_name", queue_name)
+}
+
+pub fn validate_config_component(field: &str, value: &str) -> PgAppResult<()> {
+    validate_identifier(field, value)
+}
+
+pub fn validate_config_key(key: &str) -> PgAppResult<()> {
+    if key.len() > MAX_CONFIG_KEY_LEN {
+        return Err(PgAppError::InvalidArgument(format!(
+            "config key exceeds {MAX_CONFIG_KEY_LEN} bytes"
+        )));
+    }
+    validate_identifier("config_key", key)
 }
 
 pub fn validate_cache_key(key: &str) -> PgAppResult<()> {

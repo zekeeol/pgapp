@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import App from "./App";
 
@@ -34,7 +34,10 @@ const pages = new Map<string, unknown>([
   ["/api/admin/mq/queues?limit=50&offset=0", { items: [{ name: "orders", visible_message_count: 1, in_flight_message_count: 0, archived_message_count: 1 }], limit: 50, offset: 0, next_offset: null }],
   ["/api/admin/mq/queues/orders/messages?limit=50&offset=0", { items: [{ queue_name: "orders", message_id: 7, read_count: 0, payload_preview: "{\"ok\":true}" }], limit: 50, offset: 0, next_offset: null }],
   ["/api/admin/logs?limit=50&offset=0", { items: [{ id: 1, level: "INFO", target: "pgapp_server::admin_http", message: "admin request completed", request_id: "req-1" }], limit: 50, offset: 0, next_offset: null }],
-  ["/api/admin/clients", { admin_sessions: [{ request_id: "req-1", path: "/api/admin/overview", last_seen_at: "2026-05-25T00:00:00Z" }], api_activity: [{ service: "cache", method: "get", status: "ok", count: 12, errors: 0, total_latency_millis: 34 }] }]
+  ["/api/admin/clients", { admin_sessions: [{ request_id: "req-1", path: "/api/admin/overview", last_seen_at: "2026-05-25T00:00:00Z" }], api_activity: [{ service: "cache", method: "get", status: "ok", count: 12, errors: 0, total_latency_millis: 34 }] }],
+  ["/api/admin/config/scopes?limit=50&offset=0", { items: [{ scope: { app_id: "billing", environment: "prod", cluster: "default", namespace: "application" }, current_revision: 1 }], limit: 50, offset: 0, next_offset: null }],
+  ["/api/admin/config/draft?app_id=billing&environment=prod&cluster=default&namespace=application", { scope: { app_id: "billing", environment: "prod", cluster: "default", namespace: "application" }, items: [{ key: "feature_flags", value: { enabled: true }, deleted: false, updated_at: "2026-05-25T00:00:00Z" }] }],
+  ["/api/admin/config/releases?app_id=billing&environment=prod&cluster=default&namespace=application", { items: [{ scope: { app_id: "billing", environment: "prod", cluster: "default", namespace: "application" }, revision: 1, checksum: "abc", snapshot: { feature_flags: { enabled: true } }, message: "initial", published_by: "admin", published_at: "2026-05-25T00:00:00Z" }], limit: 50, offset: 0, next_offset: null }]
 ]);
 
 describe("App", () => {
@@ -44,6 +47,12 @@ describe("App", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = input.toString();
+        if (url === "/api/admin/config/items") {
+          return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+        if (url === "/api/admin/config/releases") {
+          return new Response(JSON.stringify({ revision: 2, snapshot: { feature_flags: { enabled: false } } }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
         const body = pages.get(url);
         if (!body) {
           return new Response(JSON.stringify({ code: "not_found", message: url }), { status: 404 });
@@ -54,6 +63,7 @@ describe("App", () => {
   });
 
   afterEach(() => {
+    cleanup();
     window.sessionStorage.clear();
     vi.unstubAllGlobals();
   });
@@ -62,6 +72,8 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByText("pgapp Admin")).toBeInTheDocument();
+    expect(screen.getByText("PostgreSQL-first ops")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search admin resources" })).toBeInTheDocument();
     expect(screen.getByText("ready")).toBeInTheDocument();
     expect(screen.getByText("PG Pool")).toBeInTheDocument();
     expect(screen.getByText("Cache keys")).toBeInTheDocument();
@@ -85,5 +97,42 @@ describe("App", () => {
     expect(screen.getByText("cache")).toBeInTheDocument();
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+
+  test("renders config management with JSON edit and publish actions", async () => {
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Config" }));
+    expect(await screen.findByText("billing")).toBeInTheDocument();
+    expect(await screen.findByText("application")).toBeInTheDocument();
+    expect(await screen.findByText("feature_flags")).toBeInTheDocument();
+    expect(screen.getAllByText("Revision 1").length).toBeGreaterThan(0);
+
+    const editor = screen.getByLabelText("Config JSON value");
+    fireEvent.change(editor, { target: { value: "{\"enabled\":false}" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save config item" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/admin/config/items",
+        expect.objectContaining({ method: "PUT" })
+      )
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish config release" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/admin/config/releases",
+        expect.objectContaining({ method: "POST" })
+      )
+    );
+  });
+
+  test("shows a stable Admin API unavailable message when fetch fails", async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    render(<App />);
+
+    expect(await screen.findByText("Admin API unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
   });
 });

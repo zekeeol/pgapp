@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from pgapp.v1 import common_pb2 as pgapp_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11pgapp/v1/mq.proto\x12\x08pgapp.v1\x1a\x15pgapp/v1/common.proto\"Z\n\x12\x43reateQueueRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x30\n\x0cstorage_mode\x18\x02 \x01(\x0e\x32\x1a.pgapp.v1.QueueStorageMode\"\'\n\x11PurgeQueueRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\"&\n\x10\x44ropQueueRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\"U\n\x12SendMessageRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x14\n\x0cjson_payload\x18\x02 \x01(\t\x12\x15\n\rdelay_seconds\x18\x03 \x01(\x03\")\n\x13SendMessageResponse\x12\x12\n\nmessage_id\x18\x01 \x01(\x03\"T\n\x10SendBatchRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x15\n\rjson_payloads\x18\x02 \x03(\t\x12\x15\n\rdelay_seconds\x18\x03 \x01(\x03\"(\n\x11SendBatchResponse\x12\x13\n\x0bmessage_ids\x18\x01 \x03(\x03\"_\n\x13ReadMessagesRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\"\n\x1avisibility_timeout_seconds\x18\x03 \x01(\x03\"\x97\x01\n\x13ReadWithPollRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\"\n\x1avisibility_timeout_seconds\x18\x03 \x01(\x03\x12\x18\n\x10max_poll_seconds\x18\x04 \x01(\x03\x12\x1c\n\x14poll_interval_millis\x18\x05 \x01(\x03\"\x80\x01\n\x0cQueueMessage\x12\x12\n\nmessage_id\x18\x01 \x01(\x03\x12\x12\n\nread_count\x18\x02 \x01(\x05\x12\x13\n\x0b\x65nqueued_at\x18\x03 \x01(\t\x12\x1d\n\x15visibility_timeout_at\x18\x04 \x01(\t\x12\x14\n\x0cjson_payload\x18\x05 \x01(\t\"@\n\x14ReadMessagesResponse\x12(\n\x08messages\x18\x01 \x03(\x0b\x32\x16.pgapp.v1.QueueMessage\">\n\x14\x44\x65leteMessageRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\x03\"?\n\x15\x41rchiveMessageRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\x03\"i\n\x1bSetVisibilityTimeoutRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\x03\x12\"\n\x1avisibility_timeout_seconds\x18\x03 \x01(\x03\")\n\x13QueueMetricsRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\"\xa2\x01\n\x14QueueMetricsResponse\x12\x1d\n\x15visible_message_count\x18\x01 \x01(\x03\x12\x1f\n\x17in_flight_message_count\x18\x02 \x01(\x03\x12*\n\"oldest_visible_message_age_seconds\x18\x03 \x01(\x03\x12\x1e\n\x16\x61rchived_message_count\x18\x04 \x01(\x03*x\n\x10QueueStorageMode\x12\"\n\x1eQUEUE_STORAGE_MODE_UNSPECIFIED\x10\x00\x12\x1e\n\x1aQUEUE_STORAGE_MODE_DURABLE\x10\x01\x12 \n\x1cQUEUE_STORAGE_MODE_TRANSIENT\x10\x02\x32\xae\x06\n\tMQService\x12\x46\n\x0b\x43reateQueue\x12\x1c.pgapp.v1.CreateQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12\x44\n\nPurgeQueue\x12\x1b.pgapp.v1.PurgeQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12\x42\n\tDropQueue\x12\x1a.pgapp.v1.DropQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12\x43\n\x04Send\x12\x1c.pgapp.v1.SendMessageRequest\x1a\x1d.pgapp.v1.SendMessageResponse\x12\x44\n\tSendBatch\x12\x1a.pgapp.v1.SendBatchRequest\x1a\x1b.pgapp.v1.SendBatchResponse\x12\x45\n\x04Read\x12\x1d.pgapp.v1.ReadMessagesRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse\x12M\n\x0cReadWithPoll\x12\x1d.pgapp.v1.ReadWithPollRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse\x12\x43\n\x06\x44\x65lete\x12\x1e.pgapp.v1.DeleteMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12\x45\n\x07\x41rchive\x12\x1f.pgapp.v1.ArchiveMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12X\n\x14SetVisibilityTimeout\x12%.pgapp.v1.SetVisibilityTimeoutRequest\x1a\x19.pgapp.v1.OperationResult\x12H\n\x07Metrics\x12\x1d.pgapp.v1.QueueMetricsRequest\x1a\x1e.pgapp.v1.QueueMetricsResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11pgapp/v1/mq.proto\x12\x08pgapp.v1\x1a\x15pgapp/v1/common.proto\"Z\n\x12\x43reateQueueRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x30\n\x0cstorage_mode\x18\x02 \x01(\x0e\x32\x1a.pgapp.v1.QueueStorageMode\"\'\n\x11PurgeQueueRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\"&\n\x10\x44ropQueueRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\"U\n\x12SendMessageRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x14\n\x0cjson_payload\x18\x02 \x01(\t\x12\x15\n\rdelay_seconds\x18\x03 \x01(\x03\")\n\x13SendMessageResponse\x12\x12\n\nmessage_id\x18\x01 \x01(\x03\"T\n\x10SendBatchRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x15\n\rjson_payloads\x18\x02 \x03(\t\x12\x15\n\rdelay_seconds\x18\x03 \x01(\x03\"(\n\x11SendBatchResponse\x12\x13\n\x0bmessage_ids\x18\x01 \x03(\x03\"_\n\x13ReadMessagesRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\"\n\x1avisibility_timeout_seconds\x18\x03 \x01(\x03\"\x97\x01\n\x13ReadWithPollRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\"\n\x1avisibility_timeout_seconds\x18\x03 \x01(\x03\x12\x18\n\x10max_poll_seconds\x18\x04 \x01(\x03\x12\x1c\n\x14poll_interval_millis\x18\x05 \x01(\x03\"\x93\x01\n\x0cQueueMessage\x12\x12\n\nmessage_id\x18\x01 \x01(\x03\x12\x12\n\nread_count\x18\x02 \x01(\x05\x12\x13\n\x0b\x65nqueued_at\x18\x03 \x01(\t\x12\x1d\n\x15visibility_timeout_at\x18\x04 \x01(\t\x12\x14\n\x0cjson_payload\x18\x05 \x01(\t\x12\x11\n\tack_token\x18\x06 \x01(\t\"@\n\x14ReadMessagesResponse\x12(\n\x08messages\x18\x01 \x03(\x0b\x32\x16.pgapp.v1.QueueMessage\"N\n\x11\x41\x63kMessageRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\x03\x12\x11\n\tack_token\x18\x03 \x01(\t\"R\n\x15\x41rchiveMessageRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\x03\x12\x11\n\tack_token\x18\x03 \x01(\t\"|\n\x1bSetVisibilityTimeoutRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\x03\x12\"\n\x1avisibility_timeout_seconds\x18\x03 \x01(\x03\x12\x11\n\tack_token\x18\x04 \x01(\t\")\n\x13QueueMetricsRequest\x12\x12\n\nqueue_name\x18\x01 \x01(\t\"\xa2\x01\n\x14QueueMetricsResponse\x12\x1d\n\x15visible_message_count\x18\x01 \x01(\x03\x12\x1f\n\x17in_flight_message_count\x18\x02 \x01(\x03\x12*\n\"oldest_visible_message_age_seconds\x18\x03 \x01(\x03\x12\x1e\n\x16\x61rchived_message_count\x18\x04 \x01(\x03*x\n\x10QueueStorageMode\x12\"\n\x1eQUEUE_STORAGE_MODE_UNSPECIFIED\x10\x00\x12\x1e\n\x1aQUEUE_STORAGE_MODE_DURABLE\x10\x01\x12 \n\x1cQUEUE_STORAGE_MODE_TRANSIENT\x10\x02\x32\xa8\x06\n\tMQService\x12\x46\n\x0b\x43reateQueue\x12\x1c.pgapp.v1.CreateQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12\x44\n\nPurgeQueue\x12\x1b.pgapp.v1.PurgeQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12\x42\n\tDropQueue\x12\x1a.pgapp.v1.DropQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12\x43\n\x04Send\x12\x1c.pgapp.v1.SendMessageRequest\x1a\x1d.pgapp.v1.SendMessageResponse\x12\x44\n\tSendBatch\x12\x1a.pgapp.v1.SendBatchRequest\x1a\x1b.pgapp.v1.SendBatchResponse\x12\x45\n\x04Read\x12\x1d.pgapp.v1.ReadMessagesRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse\x12M\n\x0cReadWithPoll\x12\x1d.pgapp.v1.ReadWithPollRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse\x12=\n\x03\x41\x63k\x12\x1b.pgapp.v1.AckMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12\x45\n\x07\x41rchive\x12\x1f.pgapp.v1.ArchiveMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12X\n\x14SetVisibilityTimeout\x12%.pgapp.v1.SetVisibilityTimeoutRequest\x1a\x19.pgapp.v1.OperationResult\x12H\n\x07Metrics\x12\x1d.pgapp.v1.QueueMetricsRequest\x1a\x1e.pgapp.v1.QueueMetricsResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,8 +33,8 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'pgapp.v1.mq_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1'
-  _globals['_QUEUESTORAGEMODE']._serialized_start=1377
-  _globals['_QUEUESTORAGEMODE']._serialized_end=1497
+  _globals['_QUEUESTORAGEMODE']._serialized_start=1450
+  _globals['_QUEUESTORAGEMODE']._serialized_end=1570
   _globals['_CREATEQUEUEREQUEST']._serialized_start=54
   _globals['_CREATEQUEUEREQUEST']._serialized_end=144
   _globals['_PURGEQUEUEREQUEST']._serialized_start=146
@@ -54,19 +54,19 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_READWITHPOLLREQUEST']._serialized_start=583
   _globals['_READWITHPOLLREQUEST']._serialized_end=734
   _globals['_QUEUEMESSAGE']._serialized_start=737
-  _globals['_QUEUEMESSAGE']._serialized_end=865
-  _globals['_READMESSAGESRESPONSE']._serialized_start=867
-  _globals['_READMESSAGESRESPONSE']._serialized_end=931
-  _globals['_DELETEMESSAGEREQUEST']._serialized_start=933
-  _globals['_DELETEMESSAGEREQUEST']._serialized_end=995
-  _globals['_ARCHIVEMESSAGEREQUEST']._serialized_start=997
-  _globals['_ARCHIVEMESSAGEREQUEST']._serialized_end=1060
-  _globals['_SETVISIBILITYTIMEOUTREQUEST']._serialized_start=1062
-  _globals['_SETVISIBILITYTIMEOUTREQUEST']._serialized_end=1167
-  _globals['_QUEUEMETRICSREQUEST']._serialized_start=1169
-  _globals['_QUEUEMETRICSREQUEST']._serialized_end=1210
-  _globals['_QUEUEMETRICSRESPONSE']._serialized_start=1213
-  _globals['_QUEUEMETRICSRESPONSE']._serialized_end=1375
-  _globals['_MQSERVICE']._serialized_start=1500
-  _globals['_MQSERVICE']._serialized_end=2314
+  _globals['_QUEUEMESSAGE']._serialized_end=884
+  _globals['_READMESSAGESRESPONSE']._serialized_start=886
+  _globals['_READMESSAGESRESPONSE']._serialized_end=950
+  _globals['_ACKMESSAGEREQUEST']._serialized_start=952
+  _globals['_ACKMESSAGEREQUEST']._serialized_end=1030
+  _globals['_ARCHIVEMESSAGEREQUEST']._serialized_start=1032
+  _globals['_ARCHIVEMESSAGEREQUEST']._serialized_end=1114
+  _globals['_SETVISIBILITYTIMEOUTREQUEST']._serialized_start=1116
+  _globals['_SETVISIBILITYTIMEOUTREQUEST']._serialized_end=1240
+  _globals['_QUEUEMETRICSREQUEST']._serialized_start=1242
+  _globals['_QUEUEMETRICSREQUEST']._serialized_end=1283
+  _globals['_QUEUEMETRICSRESPONSE']._serialized_start=1286
+  _globals['_QUEUEMETRICSRESPONSE']._serialized_end=1448
+  _globals['_MQSERVICE']._serialized_start=1573
+  _globals['_MQSERVICE']._serialized_end=2381
 # @@protoc_insertion_point(module_scope)

@@ -26,7 +26,7 @@ const (
 	MQService_SendBatch_FullMethodName            = "/pgapp.v1.MQService/SendBatch"
 	MQService_Read_FullMethodName                 = "/pgapp.v1.MQService/Read"
 	MQService_ReadWithPoll_FullMethodName         = "/pgapp.v1.MQService/ReadWithPoll"
-	MQService_Delete_FullMethodName               = "/pgapp.v1.MQService/Delete"
+	MQService_Ack_FullMethodName                  = "/pgapp.v1.MQService/Ack"
 	MQService_Archive_FullMethodName              = "/pgapp.v1.MQService/Archive"
 	MQService_SetVisibilityTimeout_FullMethodName = "/pgapp.v1.MQService/SetVisibilityTimeout"
 	MQService_Metrics_FullMethodName              = "/pgapp.v1.MQService/Metrics"
@@ -43,7 +43,7 @@ type MQServiceClient interface {
 	SendBatch(ctx context.Context, in *SendBatchRequest, opts ...grpc.CallOption) (*SendBatchResponse, error)
 	Read(ctx context.Context, in *ReadMessagesRequest, opts ...grpc.CallOption) (*ReadMessagesResponse, error)
 	ReadWithPoll(ctx context.Context, in *ReadWithPollRequest, opts ...grpc.CallOption) (*ReadMessagesResponse, error)
-	Delete(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	Ack(ctx context.Context, in *AckMessageRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	Archive(ctx context.Context, in *ArchiveMessageRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	SetVisibilityTimeout(ctx context.Context, in *SetVisibilityTimeoutRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	Metrics(ctx context.Context, in *QueueMetricsRequest, opts ...grpc.CallOption) (*QueueMetricsResponse, error)
@@ -127,10 +127,10 @@ func (c *mQServiceClient) ReadWithPoll(ctx context.Context, in *ReadWithPollRequ
 	return out, nil
 }
 
-func (c *mQServiceClient) Delete(ctx context.Context, in *DeleteMessageRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+func (c *mQServiceClient) Ack(ctx context.Context, in *AckMessageRequest, opts ...grpc.CallOption) (*OperationResult, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OperationResult)
-	err := c.cc.Invoke(ctx, MQService_Delete_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MQService_Ack_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ type MQServiceServer interface {
 	SendBatch(context.Context, *SendBatchRequest) (*SendBatchResponse, error)
 	Read(context.Context, *ReadMessagesRequest) (*ReadMessagesResponse, error)
 	ReadWithPoll(context.Context, *ReadWithPollRequest) (*ReadMessagesResponse, error)
-	Delete(context.Context, *DeleteMessageRequest) (*OperationResult, error)
+	Ack(context.Context, *AckMessageRequest) (*OperationResult, error)
 	Archive(context.Context, *ArchiveMessageRequest) (*OperationResult, error)
 	SetVisibilityTimeout(context.Context, *SetVisibilityTimeoutRequest) (*OperationResult, error)
 	Metrics(context.Context, *QueueMetricsRequest) (*QueueMetricsResponse, error)
@@ -213,8 +213,8 @@ func (UnimplementedMQServiceServer) Read(context.Context, *ReadMessagesRequest) 
 func (UnimplementedMQServiceServer) ReadWithPoll(context.Context, *ReadWithPollRequest) (*ReadMessagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReadWithPoll not implemented")
 }
-func (UnimplementedMQServiceServer) Delete(context.Context, *DeleteMessageRequest) (*OperationResult, error) {
-	return nil, status.Error(codes.Unimplemented, "method Delete not implemented")
+func (UnimplementedMQServiceServer) Ack(context.Context, *AckMessageRequest) (*OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method Ack not implemented")
 }
 func (UnimplementedMQServiceServer) Archive(context.Context, *ArchiveMessageRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Archive not implemented")
@@ -372,20 +372,20 @@ func _MQService_ReadWithPoll_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MQService_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteMessageRequest)
+func _MQService_Ack_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AckMessageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MQServiceServer).Delete(ctx, in)
+		return srv.(MQServiceServer).Ack(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MQService_Delete_FullMethodName,
+		FullMethod: MQService_Ack_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MQServiceServer).Delete(ctx, req.(*DeleteMessageRequest))
+		return srv.(MQServiceServer).Ack(ctx, req.(*AckMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -480,8 +480,8 @@ var MQService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MQService_ReadWithPoll_Handler,
 		},
 		{
-			MethodName: "Delete",
-			Handler:    _MQService_Delete_Handler,
+			MethodName: "Ack",
+			Handler:    _MQService_Ack_Handler,
 		},
 		{
 			MethodName: "Archive",

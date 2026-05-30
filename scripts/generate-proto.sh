@@ -26,7 +26,8 @@ protoc \
   "$ROOT/proto/pgapp/v1/common.proto" \
   "$ROOT/proto/pgapp/v1/health.proto" \
   "$ROOT/proto/pgapp/v1/cache.proto" \
-  "$ROOT/proto/pgapp/v1/mq.proto"
+  "$ROOT/proto/pgapp/v1/mq.proto" \
+  "$ROOT/proto/pgapp/v1/config.proto"
 
 "$PYTHON_BIN" -m grpc_tools.protoc \
   -I "$ROOT/proto" \
@@ -35,4 +36,5 @@ protoc \
   "$ROOT/proto/pgapp/v1/common.proto" \
   "$ROOT/proto/pgapp/v1/health.proto" \
   "$ROOT/proto/pgapp/v1/cache.proto" \
-  "$ROOT/proto/pgapp/v1/mq.proto"
+  "$ROOT/proto/pgapp/v1/mq.proto" \
+  "$ROOT/proto/pgapp/v1/config.proto"

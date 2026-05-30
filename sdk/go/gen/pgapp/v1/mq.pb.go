@@ -561,6 +561,7 @@ type QueueMessage struct {
 	EnqueuedAt          string                 `protobuf:"bytes,3,opt,name=enqueued_at,json=enqueuedAt,proto3" json:"enqueued_at,omitempty"`
 	VisibilityTimeoutAt string                 `protobuf:"bytes,4,opt,name=visibility_timeout_at,json=visibilityTimeoutAt,proto3" json:"visibility_timeout_at,omitempty"`
 	JsonPayload         string                 `protobuf:"bytes,5,opt,name=json_payload,json=jsonPayload,proto3" json:"json_payload,omitempty"`
+	AckToken            string                 `protobuf:"bytes,6,opt,name=ack_token,json=ackToken,proto3" json:"ack_token,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -630,6 +631,13 @@ func (x *QueueMessage) GetJsonPayload() string {
 	return ""
 }
 
+func (x *QueueMessage) GetAckToken() string {
+	if x != nil {
+		return x.AckToken
+	}
+	return ""
+}
+
 type ReadMessagesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Messages      []*QueueMessage        `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
@@ -674,28 +682,29 @@ func (x *ReadMessagesResponse) GetMessages() []*QueueMessage {
 	return nil
 }
 
-type DeleteMessageRequest struct {
+type AckMessageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId     int64                  `protobuf:"varint,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	AckToken      string                 `protobuf:"bytes,3,opt,name=ack_token,json=ackToken,proto3" json:"ack_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DeleteMessageRequest) Reset() {
-	*x = DeleteMessageRequest{}
+func (x *AckMessageRequest) Reset() {
+	*x = AckMessageRequest{}
 	mi := &file_pgapp_v1_mq_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeleteMessageRequest) String() string {
+func (x *AckMessageRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeleteMessageRequest) ProtoMessage() {}
+func (*AckMessageRequest) ProtoMessage() {}
 
-func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
+func (x *AckMessageRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_pgapp_v1_mq_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -707,29 +716,37 @@ func (x *DeleteMessageRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeleteMessageRequest.ProtoReflect.Descriptor instead.
-func (*DeleteMessageRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AckMessageRequest.ProtoReflect.Descriptor instead.
+func (*AckMessageRequest) Descriptor() ([]byte, []int) {
 	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *DeleteMessageRequest) GetQueueName() string {
+func (x *AckMessageRequest) GetQueueName() string {
 	if x != nil {
 		return x.QueueName
 	}
 	return ""
 }
 
-func (x *DeleteMessageRequest) GetMessageId() int64 {
+func (x *AckMessageRequest) GetMessageId() int64 {
 	if x != nil {
 		return x.MessageId
 	}
 	return 0
 }
 
+func (x *AckMessageRequest) GetAckToken() string {
+	if x != nil {
+		return x.AckToken
+	}
+	return ""
+}
+
 type ArchiveMessageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId     int64                  `protobuf:"varint,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	AckToken      string                 `protobuf:"bytes,3,opt,name=ack_token,json=ackToken,proto3" json:"ack_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -778,11 +795,19 @@ func (x *ArchiveMessageRequest) GetMessageId() int64 {
 	return 0
 }
 
+func (x *ArchiveMessageRequest) GetAckToken() string {
+	if x != nil {
+		return x.AckToken
+	}
+	return ""
+}
+
 type SetVisibilityTimeoutRequest struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	QueueName                string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
 	MessageId                int64                  `protobuf:"varint,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	VisibilityTimeoutSeconds int64                  `protobuf:"varint,3,opt,name=visibility_timeout_seconds,json=visibilityTimeoutSeconds,proto3" json:"visibility_timeout_seconds,omitempty"`
+	AckToken                 string                 `protobuf:"bytes,4,opt,name=ack_token,json=ackToken,proto3" json:"ack_token,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -836,6 +861,13 @@ func (x *SetVisibilityTimeoutRequest) GetVisibilityTimeoutSeconds() int64 {
 		return x.VisibilityTimeoutSeconds
 	}
 	return 0
+}
+
+func (x *SetVisibilityTimeoutRequest) GetAckToken() string {
+	if x != nil {
+		return x.AckToken
+	}
+	return ""
 }
 
 type QueueMetricsRequest struct {
@@ -992,7 +1024,7 @@ const file_pgapp_v1_mq_proto_rawDesc = "" +
 	"\bquantity\x18\x02 \x01(\x05R\bquantity\x12<\n" +
 	"\x1avisibility_timeout_seconds\x18\x03 \x01(\x03R\x18visibilityTimeoutSeconds\x12(\n" +
 	"\x10max_poll_seconds\x18\x04 \x01(\x03R\x0emaxPollSeconds\x120\n" +
-	"\x14poll_interval_millis\x18\x05 \x01(\x03R\x12pollIntervalMillis\"\xc4\x01\n" +
+	"\x14poll_interval_millis\x18\x05 \x01(\x03R\x12pollIntervalMillis\"\xe1\x01\n" +
 	"\fQueueMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\x03R\tmessageId\x12\x1d\n" +
@@ -1001,25 +1033,29 @@ const file_pgapp_v1_mq_proto_rawDesc = "" +
 	"\venqueued_at\x18\x03 \x01(\tR\n" +
 	"enqueuedAt\x122\n" +
 	"\x15visibility_timeout_at\x18\x04 \x01(\tR\x13visibilityTimeoutAt\x12!\n" +
-	"\fjson_payload\x18\x05 \x01(\tR\vjsonPayload\"J\n" +
+	"\fjson_payload\x18\x05 \x01(\tR\vjsonPayload\x12\x1b\n" +
+	"\tack_token\x18\x06 \x01(\tR\backToken\"J\n" +
 	"\x14ReadMessagesResponse\x122\n" +
-	"\bmessages\x18\x01 \x03(\v2\x16.pgapp.v1.QueueMessageR\bmessages\"T\n" +
-	"\x14DeleteMessageRequest\x12\x1d\n" +
+	"\bmessages\x18\x01 \x03(\v2\x16.pgapp.v1.QueueMessageR\bmessages\"n\n" +
+	"\x11AckMessageRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\x03R\tmessageId\"U\n" +
+	"message_id\x18\x02 \x01(\x03R\tmessageId\x12\x1b\n" +
+	"\tack_token\x18\x03 \x01(\tR\backToken\"r\n" +
 	"\x15ArchiveMessageRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\x03R\tmessageId\"\x99\x01\n" +
+	"message_id\x18\x02 \x01(\x03R\tmessageId\x12\x1b\n" +
+	"\tack_token\x18\x03 \x01(\tR\backToken\"\xb6\x01\n" +
 	"\x1bSetVisibilityTimeoutRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x02 \x01(\x03R\tmessageId\x12<\n" +
-	"\x1avisibility_timeout_seconds\x18\x03 \x01(\x03R\x18visibilityTimeoutSeconds\"4\n" +
+	"\x1avisibility_timeout_seconds\x18\x03 \x01(\x03R\x18visibilityTimeoutSeconds\x12\x1b\n" +
+	"\tack_token\x18\x04 \x01(\tR\backToken\"4\n" +
 	"\x13QueueMetricsRequest\x12\x1d\n" +
 	"\n" +
 	"queue_name\x18\x01 \x01(\tR\tqueueName\"\x83\x02\n" +
@@ -1031,7 +1067,7 @@ const file_pgapp_v1_mq_proto_rawDesc = "" +
 	"\x10QueueStorageMode\x12\"\n" +
 	"\x1eQUEUE_STORAGE_MODE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aQUEUE_STORAGE_MODE_DURABLE\x10\x01\x12 \n" +
-	"\x1cQUEUE_STORAGE_MODE_TRANSIENT\x10\x022\xae\x06\n" +
+	"\x1cQUEUE_STORAGE_MODE_TRANSIENT\x10\x022\xa8\x06\n" +
 	"\tMQService\x12F\n" +
 	"\vCreateQueue\x12\x1c.pgapp.v1.CreateQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12D\n" +
 	"\n" +
@@ -1040,8 +1076,8 @@ const file_pgapp_v1_mq_proto_rawDesc = "" +
 	"\x04Send\x12\x1c.pgapp.v1.SendMessageRequest\x1a\x1d.pgapp.v1.SendMessageResponse\x12D\n" +
 	"\tSendBatch\x12\x1a.pgapp.v1.SendBatchRequest\x1a\x1b.pgapp.v1.SendBatchResponse\x12E\n" +
 	"\x04Read\x12\x1d.pgapp.v1.ReadMessagesRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse\x12M\n" +
-	"\fReadWithPoll\x12\x1d.pgapp.v1.ReadWithPollRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse\x12C\n" +
-	"\x06Delete\x12\x1e.pgapp.v1.DeleteMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12E\n" +
+	"\fReadWithPoll\x12\x1d.pgapp.v1.ReadWithPollRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse\x12=\n" +
+	"\x03Ack\x12\x1b.pgapp.v1.AckMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12E\n" +
 	"\aArchive\x12\x1f.pgapp.v1.ArchiveMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12X\n" +
 	"\x14SetVisibilityTimeout\x12%.pgapp.v1.SetVisibilityTimeoutRequest\x1a\x19.pgapp.v1.OperationResult\x12H\n" +
 	"\aMetrics\x12\x1d.pgapp.v1.QueueMetricsRequest\x1a\x1e.pgapp.v1.QueueMetricsResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3"
@@ -1073,7 +1109,7 @@ var file_pgapp_v1_mq_proto_goTypes = []any{
 	(*ReadWithPollRequest)(nil),         // 9: pgapp.v1.ReadWithPollRequest
 	(*QueueMessage)(nil),                // 10: pgapp.v1.QueueMessage
 	(*ReadMessagesResponse)(nil),        // 11: pgapp.v1.ReadMessagesResponse
-	(*DeleteMessageRequest)(nil),        // 12: pgapp.v1.DeleteMessageRequest
+	(*AckMessageRequest)(nil),           // 12: pgapp.v1.AckMessageRequest
 	(*ArchiveMessageRequest)(nil),       // 13: pgapp.v1.ArchiveMessageRequest
 	(*SetVisibilityTimeoutRequest)(nil), // 14: pgapp.v1.SetVisibilityTimeoutRequest
 	(*QueueMetricsRequest)(nil),         // 15: pgapp.v1.QueueMetricsRequest
@@ -1090,7 +1126,7 @@ var file_pgapp_v1_mq_proto_depIdxs = []int32{
 	6,  // 6: pgapp.v1.MQService.SendBatch:input_type -> pgapp.v1.SendBatchRequest
 	8,  // 7: pgapp.v1.MQService.Read:input_type -> pgapp.v1.ReadMessagesRequest
 	9,  // 8: pgapp.v1.MQService.ReadWithPoll:input_type -> pgapp.v1.ReadWithPollRequest
-	12, // 9: pgapp.v1.MQService.Delete:input_type -> pgapp.v1.DeleteMessageRequest
+	12, // 9: pgapp.v1.MQService.Ack:input_type -> pgapp.v1.AckMessageRequest
 	13, // 10: pgapp.v1.MQService.Archive:input_type -> pgapp.v1.ArchiveMessageRequest
 	14, // 11: pgapp.v1.MQService.SetVisibilityTimeout:input_type -> pgapp.v1.SetVisibilityTimeoutRequest
 	15, // 12: pgapp.v1.MQService.Metrics:input_type -> pgapp.v1.QueueMetricsRequest
@@ -1101,7 +1137,7 @@ var file_pgapp_v1_mq_proto_depIdxs = []int32{
 	7,  // 17: pgapp.v1.MQService.SendBatch:output_type -> pgapp.v1.SendBatchResponse
 	11, // 18: pgapp.v1.MQService.Read:output_type -> pgapp.v1.ReadMessagesResponse
 	11, // 19: pgapp.v1.MQService.ReadWithPoll:output_type -> pgapp.v1.ReadMessagesResponse
-	17, // 20: pgapp.v1.MQService.Delete:output_type -> pgapp.v1.OperationResult
+	17, // 20: pgapp.v1.MQService.Ack:output_type -> pgapp.v1.OperationResult
 	17, // 21: pgapp.v1.MQService.Archive:output_type -> pgapp.v1.OperationResult
 	17, // 22: pgapp.v1.MQService.SetVisibilityTimeout:output_type -> pgapp.v1.OperationResult
 	16, // 23: pgapp.v1.MQService.Metrics:output_type -> pgapp.v1.QueueMetricsResponse

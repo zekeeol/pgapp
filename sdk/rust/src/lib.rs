@@ -1,10 +1,11 @@
 use pgapp_proto::pgapp::v1::{
-    ArchiveMessageRequest, CacheItem, CacheStatsRequest, CacheStatsResponse, CreateQueueRequest,
-    DeleteCacheRequest, DeleteMessageRequest, DropQueueRequest, ExistsCacheRequest,
-    GetCacheRequest, InvalidateNamespaceRequest, MGetCacheRequest, PurgeQueueRequest, QueueMessage,
-    QueueMetricsRequest, QueueMetricsResponse, QueueStorageMode, ReadMessagesRequest,
-    ReadWithPollRequest, SendBatchRequest, SendMessageRequest, SetCacheRequest,
-    SetVisibilityTimeoutRequest, cache_service_client::CacheServiceClient,
+    AckMessageRequest, ArchiveMessageRequest, CacheItem, CacheStatsRequest, CacheStatsResponse,
+    ConfigScope, CreateQueueRequest, DeleteCacheRequest, DropQueueRequest, ExistsCacheRequest,
+    GetCacheRequest, GetConfigReleaseRequest, InvalidateNamespaceRequest, MGetCacheRequest,
+    PurgeQueueRequest, QueueMessage, QueueMetricsRequest, QueueMetricsResponse, QueueStorageMode,
+    ReadMessagesRequest, ReadWithPollRequest, SendBatchRequest, SendMessageRequest,
+    SetCacheRequest, SetVisibilityTimeoutRequest, WatchConfigRequest,
+    cache_service_client::CacheServiceClient, config_service_client::ConfigServiceClient,
     mq_service_client::MqServiceClient,
 };
 use serde_json::Value;
@@ -57,6 +58,13 @@ impl PgAppClient {
     pub fn mq(&self) -> MqClient {
         MqClient {
             inner: MqServiceClient::new(self.channel.clone()),
+            timeout: self.timeout,
+        }
+    }
+
+    pub fn config(&self) -> ConfigClient {
+        ConfigClient {
+            inner: ConfigServiceClient::new(self.channel.clone()),
             timeout: self.timeout,
         }
     }
@@ -246,18 +254,30 @@ impl MqClient {
             .messages)
     }
 
-    pub async fn delete(&mut self, queue_name: &str, message_id: i64) -> Result<bool, Status> {
-        let request = self.with_timeout(DeleteMessageRequest {
+    pub async fn ack(
+        &mut self,
+        queue_name: &str,
+        message_id: i64,
+        ack_token: &str,
+    ) -> Result<bool, Status> {
+        let request = self.with_timeout(AckMessageRequest {
             queue_name: queue_name.to_string(),
             message_id,
+            ack_token: ack_token.to_string(),
         });
-        Ok(self.inner.delete(request).await?.into_inner().success)
+        Ok(self.inner.ack(request).await?.into_inner().success)
     }
 
-    pub async fn archive(&mut self, queue_name: &str, message_id: i64) -> Result<bool, Status> {
+    pub async fn archive(
+        &mut self,
+        queue_name: &str,
+        message_id: i64,
+        ack_token: &str,
+    ) -> Result<bool, Status> {
         let request = self.with_timeout(ArchiveMessageRequest {
             queue_name: queue_name.to_string(),
             message_id,
+            ack_token: ack_token.to_string(),
         });
         Ok(self.inner.archive(request).await?.into_inner().success)
     }
@@ -266,12 +286,14 @@ impl MqClient {
         &mut self,
         queue_name: &str,
         message_id: i64,
+        ack_token: &str,
         visibility_timeout_seconds: i64,
     ) -> Result<bool, Status> {
         let request = self.with_timeout(SetVisibilityTimeoutRequest {
             queue_name: queue_name.to_string(),
             message_id,
             visibility_timeout_seconds,
+            ack_token: ack_token.to_string(),
         });
         Ok(self
             .inner
@@ -309,4 +331,113 @@ impl MqClient {
         }
         request
     }
+}
+
+#[derive(Clone)]
+pub struct ConfigClient {
+    inner: ConfigServiceClient<Channel>,
+    timeout: Option<Duration>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfigReleaseSnapshot {
+    pub scope: ConfigScope,
+    pub revision: i64,
+    pub checksum: String,
+    pub snapshot: Value,
+    pub message: String,
+    pub published_by: String,
+    pub published_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfigWatchResult {
+    pub changed: bool,
+    pub latest_revision: i64,
+    pub release: Option<ConfigReleaseSnapshot>,
+}
+
+impl ConfigClient {
+    pub fn scope(
+        app_id: impl Into<String>,
+        environment: impl Into<String>,
+        cluster: impl Into<String>,
+        namespace: impl Into<String>,
+    ) -> ConfigScope {
+        ConfigScope {
+            app_id: app_id.into(),
+            environment: environment.into(),
+            cluster: cluster.into(),
+            namespace: namespace.into(),
+        }
+    }
+
+    pub async fn get_latest_release(
+        &mut self,
+        scope: ConfigScope,
+    ) -> Result<ConfigReleaseSnapshot, Status> {
+        self.get_release(scope, 0).await
+    }
+
+    pub async fn get_release(
+        &mut self,
+        scope: ConfigScope,
+        revision: i64,
+    ) -> Result<ConfigReleaseSnapshot, Status> {
+        let request = self.with_timeout(GetConfigReleaseRequest {
+            scope: Some(scope),
+            revision,
+        });
+        let release = self.inner.get_release(request).await?.into_inner();
+        proto_release_to_snapshot(release)
+    }
+
+    pub async fn watch(
+        &mut self,
+        scope: ConfigScope,
+        known_revision: i64,
+        timeout_seconds: i64,
+    ) -> Result<ConfigWatchResult, Status> {
+        let request = self.with_timeout(WatchConfigRequest {
+            scope: Some(scope),
+            known_revision,
+            timeout_seconds,
+        });
+        let response = self.inner.watch(request).await?.into_inner();
+        Ok(ConfigWatchResult {
+            changed: response.changed,
+            latest_revision: response.latest_revision,
+            release: response
+                .release
+                .map(proto_release_to_snapshot)
+                .transpose()?,
+        })
+    }
+
+    fn with_timeout<T>(&self, message: T) -> Request<T> {
+        let mut request = Request::new(message);
+        if let Some(timeout) = self.timeout {
+            request.set_timeout(timeout);
+        }
+        request
+    }
+}
+
+fn proto_release_to_snapshot(
+    release: pgapp_proto::pgapp::v1::ConfigRelease,
+) -> Result<ConfigReleaseSnapshot, Status> {
+    let scope = release
+        .scope
+        .ok_or_else(|| Status::internal("config release missing scope"))?;
+    let snapshot = serde_json::from_str(&release.snapshot_json)
+        .map_err(|err| Status::internal(format!("invalid release snapshot JSON: {err}")))?;
+    Ok(ConfigReleaseSnapshot {
+        scope,
+        revision: release.revision,
+        checksum: release.checksum,
+        snapshot,
+        message: release.message,
+        published_by: release.published_by,
+        published_at: release.published_at,
+    })
 }
