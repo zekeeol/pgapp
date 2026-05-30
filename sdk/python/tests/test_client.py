@@ -10,6 +10,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(client.timeout, 3)
         self.assertIs(client.cache.client, client)
         self.assertIs(client.mq.client, client)
+        self.assertIs(client.config.client, client)
 
     def test_cache_bytes_are_preserved(self) -> None:
         client = PGAppClient()
@@ -19,6 +20,12 @@ class ClientTests(unittest.TestCase):
     def test_mq_json_is_stable(self) -> None:
         client = PGAppClient()
         self.assertEqual(client.mq.encode_json({"b": 2, "a": 1}), '{"a":1,"b":2}')
+
+    def test_config_scope_and_json_are_stable(self) -> None:
+        client = PGAppClient()
+        scope = client.config.scope("billing", "prod", "default", "application")
+        self.assertEqual(scope.app_id, "billing")
+        self.assertEqual(client.config.encode_json({"b": 2, "a": 1}), '{"a":1,"b":2}')
 
     def test_python_sdk_error_preserves_status(self) -> None:
         client = PGAppClient()

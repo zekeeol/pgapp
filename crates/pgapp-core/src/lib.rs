@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod cache;
 pub mod config;
+pub mod config_center;
 pub mod db;
 pub mod error;
 pub mod metrics;

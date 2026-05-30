@@ -2,7 +2,7 @@
 
 This guide runs PGApp locally with Docker Compose. It starts PostgreSQL,
 `pgapp-server`, and the React Admin UI. The server initializes the PostgreSQL
-schema on startup.
+schema on startup, including Cache, MQ, Admin logs, and Config Center tables.
 
 ## Ports
 
@@ -52,6 +52,9 @@ Expected tables:
 - `mq_archives`
 - `mq_messages`
 - `mq_queues`
+- `config_items`
+- `config_releases`
+- `config_scopes`
 - `admin_log_events`
 
 Verify Admin HTTP:
@@ -59,6 +62,53 @@ Verify Admin HTTP:
 ```sh
 curl -H 'Authorization: Bearer change-me-local-admin-token' \
   http://127.0.0.1:8080/api/admin/overview
+```
+
+Verify Admin UI availability:
+
+```sh
+curl -I http://127.0.0.1:3000
+```
+
+Verify MQ delivery acknowledgement with the Python SDK:
+
+```sh
+PGAPP_TEST_ENDPOINT=127.0.0.1:50051 \
+PYTHONPATH=sdk/python:sdk/python/pgapp_sdk/gen \
+.venv/bin/python - <<'PY'
+from time import time_ns
+
+from pgapp_sdk import PGAppClient
+
+client = PGAppClient("127.0.0.1:50051", timeout=5)
+queue = f"local_ack_{time_ns()}"
+
+client.mq.create_queue(queue)
+message_id = client.mq.send_json(queue, {"ok": True})
+message = client.mq.read(queue, quantity=1, visibility_timeout_seconds=30)[0]
+
+assert message.message_id == message_id
+assert message.ack_token
+assert client.mq.ack(queue, message.message_id, message.ack_token)
+assert client.mq.read(queue, quantity=1, visibility_timeout_seconds=1) == []
+print("mq ack ok")
+PY
+```
+
+Create and publish a Config Center release through Admin HTTP:
+
+```sh
+curl -X PUT \
+  -H 'Authorization: Bearer change-me-local-admin-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":{"app_id":"billing","environment":"prod","cluster":"default","namespace":"application"},"key":"feature_flags","value":{"enabled":true}}' \
+  http://127.0.0.1:8080/api/admin/config/items
+
+curl -X POST \
+  -H 'Authorization: Bearer change-me-local-admin-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":{"app_id":"billing","environment":"prod","cluster":"default","namespace":"application"},"message":"initial","published_by":"local"}' \
+  http://127.0.0.1:8080/api/admin/config/releases
 ```
 
 Open the Admin UI and enter `change-me-local-admin-token`:

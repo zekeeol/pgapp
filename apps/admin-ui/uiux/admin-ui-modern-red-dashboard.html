@@ -1,0 +1,1567 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin UI Modern Dashboard</title>
+  <style>
+    :root {
+      --primary: #FF2442;
+      --primary-component: #FF2E4D;
+      --surface: #FFFFFF;
+      --canvas: #F5F5F5;
+      --subtle: #FAFAFA;
+      --fill1: rgba(48,48,52,0.05);
+      --fill2: rgba(48,48,52,0.10);
+      --fill3: rgba(48,48,52,0.20);
+      --separator: rgba(0,0,0,0.08);
+      --separator2: rgba(0,0,0,0.20);
+      --title: rgba(0,0,0,0.80);
+      --paragraph: rgba(0,0,0,0.62);
+      --description: rgba(0,0,0,0.45);
+      --disabled: rgba(0,0,0,0.27);
+      --success: #02B940;
+      --warning: #FF7D03;
+      --info: #3D8AF5;
+      --success-bg: #EAF8EF;
+      --warning-bg: #FFF2E6;
+      --info-bg: #EDF5FF;
+      --font: PingFang SC, -apple-system, "Helvetica Neue", "Hiragino Sans GB", "Microsoft Yahei", Arial, sans-serif;
+      --font-number: "RED Number", PingFang SC, -apple-system, "Helvetica Neue", Arial, sans-serif;
+      --sidebar: 248px;
+      --radius-card: 16px;
+      --radius-control: 9999px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--canvas);
+      color: var(--title);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 88% 8%, rgba(255,36,66,0.055), transparent 28%),
+        linear-gradient(180deg, #fff 0, var(--canvas) 240px);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      z-index: 30;
+      padding: 20px 16px;
+      background: rgba(255,255,255,0.94);
+      border-right: 1px solid var(--separator);
+      backdrop-filter: blur(18px);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 8px 16px;
+      border-bottom: 1px solid var(--separator);
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      background: var(--primary);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .brand-title {
+      display: block;
+      font-size: 16px;
+      line-height: 24px;
+      font-weight: 600;
+    }
+
+    .brand-sub {
+      display: block;
+      color: var(--description);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .nav-block {
+      display: grid;
+      gap: 6px;
+    }
+
+    .nav-caption {
+      margin: 8px 8px 4px;
+      color: var(--description);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .nav-item {
+      min-height: 42px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-control);
+      background: transparent;
+      color: var(--paragraph);
+      text-align: left;
+      transition: background .18s ease, color .18s ease;
+    }
+
+    .nav-item:hover {
+      background: var(--fill1);
+      color: var(--title);
+    }
+
+    .nav-item.active {
+      background: rgba(255,36,66,0.10);
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .nav-icon {
+      width: 20px;
+      text-align: center;
+      font-size: 15px;
+    }
+
+    .sidebar-note {
+      margin-top: auto;
+      padding: 14px;
+      border-radius: 16px;
+      background: var(--fill1);
+    }
+
+    .sidebar-note strong {
+      display: block;
+      font-size: 14px;
+      line-height: 22px;
+      font-weight: 600;
+    }
+
+    .sidebar-note p {
+      margin: 4px 0 12px;
+      color: var(--paragraph);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      min-height: 72px;
+      padding: 16px clamp(16px, 3vw, 32px);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(245,245,245,0.86);
+      border-bottom: 1px solid var(--separator);
+      backdrop-filter: blur(18px);
+    }
+
+    .menu-btn {
+      display: none;
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-control);
+      border: 1px solid var(--separator);
+      background: var(--surface);
+      color: var(--title);
+    }
+
+    .search {
+      flex: 1;
+      max-width: 560px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      border-radius: var(--radius-control);
+      background: var(--surface);
+      border: 1px solid transparent;
+    }
+
+    .search:focus-within {
+      border-color: var(--separator2);
+    }
+
+    .search-icon {
+      color: var(--description);
+    }
+
+    .search input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--title);
+      font-size: 14px;
+    }
+
+    .top-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon-btn {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-control);
+      background: var(--surface);
+      border: 1px solid var(--separator);
+      color: var(--paragraph);
+      display: grid;
+      place-items: center;
+    }
+
+    .red-dot {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+    }
+
+    .user-chip {
+      height: 40px;
+      border-radius: var(--radius-control);
+      padding: 4px 12px 4px 4px;
+      background: var(--surface);
+      border: 1px solid var(--separator);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--paragraph);
+      font-size: 14px;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--fill2);
+      color: var(--title);
+      font-weight: 600;
+      font-size: 13px;
+      overflow: hidden;
+    }
+
+    .page {
+      width: min(100%, 1480px);
+      margin: 0 auto;
+      padding: 28px clamp(16px, 3vw, 32px) 42px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .eyebrow {
+      margin: 0 0 4px;
+      color: var(--description);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 32px);
+      line-height: 1.25;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    .head-desc {
+      margin: 8px 0 0;
+      color: var(--paragraph);
+      font-size: 14px;
+      line-height: 22px;
+    }
+
+    .head-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      min-height: 38px;
+      padding: 8px 18px;
+      border-radius: var(--radius-control);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn.secondary {
+      background: var(--fill2);
+      color: var(--title);
+    }
+
+    .btn.outline {
+      background: var(--surface);
+      color: var(--primary-component);
+      border: 1px solid var(--primary-component);
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(320px, .75fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--separator);
+      border-radius: var(--radius-card);
+      box-shadow: none;
+      min-width: 0;
+    }
+
+    .card-pad {
+      padding: 20px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 28px;
+      font-weight: 600;
+    }
+
+    .section-title p {
+      margin: 2px 0 0;
+      color: var(--description);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .tab-row {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      border-bottom: 1px solid var(--separator);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .tab-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab {
+      position: relative;
+      min-height: 44px;
+      padding: 0;
+      background: transparent;
+      color: var(--description);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      color: var(--title);
+      font-weight: 600;
+    }
+
+    .tab.active::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--primary-component);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--subtle);
+      border: 1px solid var(--separator);
+      min-width: 0;
+    }
+
+    .metric-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--description);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .metric-value {
+      margin-top: 10px;
+      font-family: var(--font-number);
+      font-size: clamp(22px, 2.6vw, 30px);
+      line-height: 36px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      color: var(--title);
+    }
+
+    .metric-foot {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--paragraph);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .delta {
+      font-family: var(--font-number);
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    .delta.warn {
+      color: var(--warning);
+    }
+
+    .chart-card {
+      overflow: hidden;
+    }
+
+    .chart-wrap {
+      height: 292px;
+      padding: 8px 4px 0;
+    }
+
+    .chart {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .chart-line {
+      fill: none;
+      stroke: var(--primary);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .chart-line-soft {
+      fill: none;
+      stroke: rgba(61,138,245,0.46);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .chart-area {
+      fill: url(#area);
+    }
+
+    .axis {
+      stroke: rgba(0,0,0,0.08);
+      stroke-width: 1;
+    }
+
+    .chart-label {
+      font-size: 11px;
+      fill: rgba(0,0,0,0.45);
+      font-family: var(--font-number);
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .quick-card {
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--separator);
+      background: var(--subtle);
+      display: grid;
+      gap: 8px;
+    }
+
+    .quick-card strong {
+      font-size: 15px;
+      line-height: 22px;
+      font-weight: 600;
+    }
+
+    .quick-card span {
+      color: var(--paragraph);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      width: max-content;
+      min-height: 24px;
+      padding: 3px 10px;
+      border-radius: var(--radius-control);
+      background: var(--fill2);
+      color: var(--paragraph);
+      font-size: 12px;
+      line-height: 18px;
+      white-space: nowrap;
+    }
+
+    .pill.red {
+      background: rgba(255,36,66,0.10);
+      color: var(--primary);
+    }
+
+    .pill.green {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .pill.orange {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+
+    .task-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .task {
+      padding: 14px;
+      border-radius: 16px;
+      background: var(--subtle);
+      border: 1px solid var(--separator);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .task strong {
+      display: block;
+      font-size: 14px;
+      line-height: 22px;
+      font-weight: 600;
+    }
+
+    .task span {
+      color: var(--description);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .table-card {
+      overflow: hidden;
+    }
+
+    .toolbar {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--separator);
+    }
+
+    .field {
+      height: 38px;
+      border: 0;
+      outline: 0;
+      border-radius: var(--radius-control);
+      background: var(--fill1);
+      color: var(--title);
+      padding: 0 14px;
+      min-width: 170px;
+      font-size: 14px;
+    }
+
+    .field:focus {
+      box-shadow: inset 0 0 0 1px var(--separator2);
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 820px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 14px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--separator);
+      font-size: 14px;
+      line-height: 22px;
+      vertical-align: middle;
+    }
+
+    th {
+      color: var(--description);
+      font-weight: 500;
+      background: var(--subtle);
+    }
+
+    td {
+      color: var(--paragraph);
+    }
+
+    .name-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--title);
+      font-weight: 500;
+    }
+
+    .mini-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+      flex: 0 0 auto;
+    }
+
+    .row-action {
+      color: var(--primary);
+      background: transparent;
+      padding: 4px 0;
+      font-size: 14px;
+    }
+
+    .pagination {
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--description);
+      font-size: 13px;
+    }
+
+    .page-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .page-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: var(--fill1);
+      color: var(--paragraph);
+    }
+
+    .page-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .kanban {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .kanban-col {
+      padding: 12px;
+      border-radius: 16px;
+      background: var(--subtle);
+      border: 1px solid var(--separator);
+      min-width: 0;
+    }
+
+    .kanban-title {
+      margin: 0 0 10px;
+      color: var(--paragraph);
+      font-size: 13px;
+      line-height: 20px;
+      font-weight: 500;
+    }
+
+    .note-card {
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--surface);
+      border: 1px solid var(--separator);
+      margin-bottom: 10px;
+    }
+
+    .note-card strong {
+      display: block;
+      font-size: 14px;
+      line-height: 22px;
+      font-weight: 600;
+    }
+
+    .note-card p {
+      margin: 4px 0 10px;
+      color: var(--paragraph);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .drawer-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(0,0,0,0.38);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+    }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 70;
+      width: min(480px, 100vw);
+      background: var(--surface);
+      transform: translateX(100%);
+      transition: transform .22s ease;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+    }
+
+    body.drawer-open .drawer-mask {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    body.drawer-open .drawer {
+      transform: translateX(0);
+    }
+
+    .drawer-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--separator);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .drawer-head h3 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 28px;
+      font-weight: 600;
+    }
+
+    .drawer-close {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-control);
+      background: var(--fill1);
+      color: var(--paragraph);
+    }
+
+    .drawer-body {
+      padding: 20px;
+      overflow: auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .detail-hero {
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--subtle);
+      border: 1px solid var(--separator);
+      display: grid;
+      gap: 10px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .detail-item {
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--fill1);
+    }
+
+    .detail-item span {
+      display: block;
+      color: var(--description);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .detail-item strong {
+      display: block;
+      margin-top: 4px;
+      font-family: var(--font-number);
+      color: var(--title);
+      font-size: 18px;
+      line-height: 26px;
+      font-weight: 600;
+    }
+
+    .mobile-mask {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 25;
+      background: rgba(0,0,0,0.32);
+    }
+
+    .screen {
+      display: none;
+      gap: 20px;
+    }
+
+    .screen.active {
+      display: grid;
+    }
+
+    @media (max-width: 1180px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 860px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: min(300px, 86vw);
+        transform: translateX(-100%);
+        transition: transform .22s ease;
+      }
+
+      body.sidebar-open .sidebar {
+        transform: translateX(0);
+      }
+
+      body.sidebar-open .mobile-mask {
+        display: block;
+      }
+
+      .menu-btn {
+        display: grid;
+        place-items: center;
+      }
+
+      .topbar {
+        min-height: 64px;
+      }
+
+      .user-chip span {
+        display: none;
+      }
+
+      .page-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .head-actions {
+        justify-content: flex-start;
+      }
+
+      .kanban {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .page {
+        padding: 20px 12px 32px;
+      }
+
+      .topbar {
+        padding: 12px;
+        gap: 8px;
+      }
+
+      .search {
+        max-width: none;
+        min-width: 0;
+      }
+
+      .top-actions .icon-btn {
+        display: none;
+      }
+
+      .stats-grid,
+      .quick-grid,
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .card-pad,
+      .toolbar {
+        padding: 16px;
+      }
+
+      .task {
+        grid-template-columns: 1fr;
+      }
+
+      .pagination {
+        gap: 12px;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .drawer {
+        top: auto;
+        height: 88vh;
+        border-radius: 16px 16px 0 0;
+        transform: translateY(100%);
+        width: 100%;
+      }
+
+      body.drawer-open .drawer {
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="mobile-mask" id="mobileMask"></div>
+
+  <div class="app">
+    <aside class="sidebar" aria-label="侧边导航">
+      <div class="brand">
+        <div class="brand-mark">ADM</div>
+        <div>
+          <span class="brand-title">后台看板</span>
+          <span class="brand-sub">你的运营工作台</span>
+        </div>
+      </div>
+
+      <nav class="nav-block">
+        <div class="nav-caption">主要功能</div>
+        <button class="nav-item active" data-screen="overview"><span class="nav-icon">⌂</span>首页工作台</button>
+        <button class="nav-item" data-screen="analytics"><span class="nav-icon">⌁</span>数据看板</button>
+        <button class="nav-item" data-screen="list"><span class="nav-icon">☷</span>列表管理</button>
+        <button class="nav-item" data-screen="tasks"><span class="nav-icon">✓</span>待办流程</button>
+      </nav>
+
+      <nav class="nav-block">
+        <div class="nav-caption">系统</div>
+        <button class="nav-item"><span class="nav-icon">⚙</span>配置中心</button>
+        <button class="nav-item"><span class="nav-icon">◌</span>操作记录</button>
+      </nav>
+
+      <div class="sidebar-note">
+        <strong>今日建议</strong>
+        <p>先处理异常任务，再看趋势波动，减少重复切换页面。</p>
+        <button class="btn outline" type="button">查看建议</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="menu-btn" id="menuBtn" aria-label="打开菜单">☰</button>
+        <label class="search">
+          <span class="search-icon">⌕</span>
+          <input id="globalSearch" placeholder="搜索任务、用户、订单或配置…" />
+        </label>
+        <div class="top-actions">
+          <button class="icon-btn" aria-label="通知">铃<span class="red-dot"></span></button>
+          <button class="icon-btn" aria-label="快捷操作">＋</button>
+          <div class="user-chip">
+            <div class="avatar">你</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="page">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">上午好，今天有 7 个事项值得你看一下</p>
+            <h1 id="pageTitle">首页工作台</h1>
+            <p class="head-desc" id="pageDesc">把核心指标、异常提醒和待办动作放在一个页面里，减少来回跳转。</p>
+          </div>
+          <div class="head-actions">
+            <button class="btn secondary" id="periodBtn">近 7 天</button>
+            <button class="btn primary" id="createBtn">新建任务</button>
+          </div>
+        </div>
+
+        <section class="screen active" id="overview">
+          <div class="stats-grid">
+            <article class="metric">
+              <div class="metric-label">访问量 <span class="pill red">实时</span></div>
+              <div class="metric-value">24,806</div>
+              <div class="metric-foot"><span class="delta">+12.4%</span>较昨日</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">转化数 <span class="pill">核心</span></div>
+              <div class="metric-value">1,284</div>
+              <div class="metric-foot"><span class="delta">+6.8%</span>稳定增长</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">待处理 <span class="pill orange">优先</span></div>
+              <div class="metric-value">17</div>
+              <div class="metric-foot"><span class="delta warn">3</span>个超时风险</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">健康度 <span class="pill green">正常</span></div>
+              <div class="metric-value">96.2</div>
+              <div class="metric-foot"><span class="delta">+1.2</span>系统稳定</div>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <article class="card card-pad chart-card">
+              <div class="section-title">
+                <div>
+                  <h2>趋势概览</h2>
+                  <p>访问、转化和处理效率的近周期变化</p>
+                </div>
+                <div class="tab-row" role="tablist">
+                  <button class="tab active" data-chart="visit">访问</button>
+                  <button class="tab" data-chart="convert">转化</button>
+                  <button class="tab" data-chart="task">处理</button>
+                </div>
+              </div>
+              <div class="chart-wrap">
+                <svg class="chart" viewBox="0 0 760 260" preserveAspectRatio="none" aria-label="趋势图">
+                  <defs>
+                    <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="#FF2442" stop-opacity="0.18"/>
+                      <stop offset="100%" stop-color="#FF2442" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <line class="axis" x1="20" y1="220" x2="740" y2="220"/>
+                  <line class="axis" x1="20" y1="170" x2="740" y2="170"/>
+                  <line class="axis" x1="20" y1="120" x2="740" y2="120"/>
+                  <line class="axis" x1="20" y1="70" x2="740" y2="70"/>
+                  <path class="chart-area" d="M20,178 C90,146 125,158 170,128 C230,88 270,112 320,96 C382,72 410,84 470,66 C548,42 590,70 642,46 C690,28 716,38 740,34 L740,220 L20,220 Z"/>
+                  <path class="chart-line" d="M20,178 C90,146 125,158 170,128 C230,88 270,112 320,96 C382,72 410,84 470,66 C548,42 590,70 642,46 C690,28 716,38 740,34"/>
+                  <path class="chart-line-soft" d="M20,196 C88,176 130,184 178,158 C240,132 284,150 336,122 C396,98 438,112 494,92 C560,76 604,94 652,70 C690,58 716,66 740,56"/>
+                  <text class="chart-label" x="20" y="246">Mon</text>
+                  <text class="chart-label" x="146" y="246">Tue</text>
+                  <text class="chart-label" x="272" y="246">Wed</text>
+                  <text class="chart-label" x="398" y="246">Thu</text>
+                  <text class="chart-label" x="524" y="246">Fri</text>
+                  <text class="chart-label" x="650" y="246">Sun</text>
+                </svg>
+              </div>
+            </article>
+
+            <aside class="card card-pad">
+              <div class="section-title">
+                <div>
+                  <h2>待处理</h2>
+                  <p>优先展示会影响结果的事项</p>
+                </div>
+              </div>
+              <div class="task-list">
+                <div class="task">
+                  <div>
+                    <strong>3 条异常数据需要确认</strong>
+                    <span>来源：数据同步 / 5 分钟前</span>
+                  </div>
+                  <button class="btn secondary open-detail">处理</button>
+                </div>
+                <div class="task">
+                  <div>
+                    <strong>本周报表还未生成</strong>
+                    <span>建议在今天 18:00 前完成</span>
+                  </div>
+                  <button class="btn secondary open-detail">生成</button>
+                </div>
+                <div class="task">
+                  <div>
+                    <strong>新增 12 个待审核项目</strong>
+                    <span>其中 2 个为高优先级</span>
+                  </div>
+                  <button class="btn primary open-detail">查看</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <article class="card card-pad">
+            <div class="section-title">
+              <div>
+                <h2>快捷入口</h2>
+                <p>把你最常用的动作收在首页</p>
+              </div>
+            </div>
+            <div class="quick-grid">
+              <button class="quick-card open-detail">
+                <span class="pill red">推荐</span>
+                <strong>创建运营任务</strong>
+                <span>快速选择对象、时间和触发规则。</span>
+              </button>
+              <button class="quick-card open-detail">
+                <span class="pill">效率</span>
+                <strong>导出本周数据</strong>
+                <span>生成 CSV / Excel，保留当前筛选条件。</span>
+              </button>
+              <button class="quick-card open-detail">
+                <span class="pill green">稳定</span>
+                <strong>检查同步状态</strong>
+                <span>查看接口、队列和异常重试。</span>
+              </button>
+              <button class="quick-card open-detail">
+                <span class="pill orange">提醒</span>
+                <strong>配置告警规则</strong>
+                <span>超过阈值时自动提醒你处理。</span>
+              </button>
+            </div>
+          </article>
+        </section>
+
+        <section class="screen" id="analytics">
+          <div class="stats-grid">
+            <article class="metric">
+              <div class="metric-label">GMV 指标 <span class="pill red">关键</span></div>
+              <div class="metric-value">¥86,420</div>
+              <div class="metric-foot"><span class="delta">+9.1%</span>近 7 天</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">新增用户</div>
+              <div class="metric-value">3,912</div>
+              <div class="metric-foot"><span class="delta">+4.2%</span>自然增长</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">完成率</div>
+              <div class="metric-value">82.6%</div>
+              <div class="metric-foot"><span class="delta warn">-1.8%</span>需关注</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">异常数</div>
+              <div class="metric-value">7</div>
+              <div class="metric-foot"><span class="delta">-5</span>较昨日减少</div>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <article class="card card-pad chart-card">
+              <div class="section-title">
+                <div>
+                  <h2>核心数据走势</h2>
+                  <p>默认展示业务健康度，不堆满无关图表</p>
+                </div>
+                <button class="btn secondary">导出</button>
+              </div>
+              <div class="chart-wrap">
+                <svg class="chart" viewBox="0 0 760 260" preserveAspectRatio="none">
+                  <line class="axis" x1="20" y1="220" x2="740" y2="220"/>
+                  <line class="axis" x1="20" y1="170" x2="740" y2="170"/>
+                  <line class="axis" x1="20" y1="120" x2="740" y2="120"/>
+                  <line class="axis" x1="20" y1="70" x2="740" y2="70"/>
+                  <path class="chart-line-soft" d="M20,160 C94,142 120,170 190,128 C256,86 300,112 360,76 C430,44 480,68 540,58 C610,46 668,48 740,30"/>
+                  <path class="chart-line" d="M20,188 C80,168 120,148 176,156 C236,166 282,98 342,112 C410,126 456,82 512,74 C598,62 650,78 740,48"/>
+                  <text class="chart-label" x="20" y="246">1日</text>
+                  <text class="chart-label" x="146" y="246">5日</text>
+                  <text class="chart-label" x="272" y="246">10日</text>
+                  <text class="chart-label" x="398" y="246">15日</text>
+                  <text class="chart-label" x="524" y="246">20日</text>
+                  <text class="chart-label" x="650" y="246">今日</text>
+                </svg>
+              </div>
+            </article>
+
+            <aside class="card card-pad">
+              <div class="section-title">
+                <div>
+                  <h2>渠道表现</h2>
+                  <p>按贡献排序</p>
+                </div>
+              </div>
+              <div class="task-list">
+                <div class="task">
+                  <div><strong>自然访问</strong><span>贡献 42%，趋势稳定</span></div>
+                  <span class="pill green">+8.6%</span>
+                </div>
+                <div class="task">
+                  <div><strong>活动入口</strong><span>贡献 28%，波动较大</span></div>
+                  <span class="pill orange">-2.1%</span>
+                </div>
+                <div class="task">
+                  <div><strong>搜索来源</strong><span>贡献 18%，可继续优化</span></div>
+                  <span class="pill red">重点</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="screen" id="list">
+          <article class="card table-card">
+            <div class="toolbar">
+              <input class="field" id="tableSearch" placeholder="搜索名称 / ID" />
+              <select class="field" id="statusFilter">
+                <option value="all">全部状态</option>
+                <option value="running">进行中</option>
+                <option value="pending">待处理</option>
+                <option value="done">已完成</option>
+              </select>
+              <button class="btn secondary" id="resetFilter">重置</button>
+              <button class="btn primary">新增记录</button>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>状态</th>
+                    <th>负责人</th>
+                    <th>更新时间</th>
+                    <th>数据</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="tableBody">
+                  <tr data-status="running">
+                    <td><div class="name-cell"><span class="mini-avatar">A</span>活动配置同步</div></td>
+                    <td><span class="pill green">进行中</span></td>
+                    <td>你</td>
+                    <td>10 分钟前</td>
+                    <td>1,284</td>
+                    <td><button class="row-action open-detail">查看详情</button></td>
+                  </tr>
+                  <tr data-status="pending">
+                    <td><div class="name-cell"><span class="mini-avatar">B</span>异常任务队列</div></td>
+                    <td><span class="pill orange">待处理</span></td>
+                    <td>你</td>
+                    <td>32 分钟前</td>
+                    <td>17</td>
+                    <td><button class="row-action open-detail">查看详情</button></td>
+                  </tr>
+                  <tr data-status="done">
+                    <td><div class="name-cell"><span class="mini-avatar">C</span>周报数据导出</div></td>
+                    <td><span class="pill">已完成</span></td>
+                    <td>系统</td>
+                    <td>1 小时前</td>
+                    <td>8,630</td>
+                    <td><button class="row-action open-detail">查看详情</button></td>
+                  </tr>
+                  <tr data-status="running">
+                    <td><div class="name-cell"><span class="mini-avatar">D</span>用户增长分析</div></td>
+                    <td><span class="pill green">进行中</span></td>
+                    <td>你</td>
+                    <td>今天 09:18</td>
+                    <td>3,912</td>
+                    <td><button class="row-action open-detail">查看详情</button></td>
+                  </tr>
+                  <tr data-status="pending">
+                    <td><div class="name-cell"><span class="mini-avatar">E</span>阈值告警配置</div></td>
+                    <td><span class="pill orange">待处理</span></td>
+                    <td>你</td>
+                    <td>昨天 18:40</td>
+                    <td>4</td>
+                    <td><button class="row-action open-detail">查看详情</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <span id="rowCount">共 5 条记录</span>
+              <div class="page-buttons">
+                <button class="page-btn">‹</button>
+                <button class="page-btn active">1</button>
+                <button class="page-btn">2</button>
+                <button class="page-btn">›</button>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="screen" id="tasks">
+          <article class="card card-pad">
+            <div class="section-title">
+              <div>
+                <h2>流程看板</h2>
+                <p>少一点表格，多一点可执行状态</p>
+              </div>
+              <button class="btn primary">新增流程</button>
+            </div>
+            <div class="kanban">
+              <div class="kanban-col">
+                <h3 class="kanban-title">待开始</h3>
+                <div class="note-card">
+                  <strong>整理首页指标口径</strong>
+                  <p>确认哪些数据放在首屏，避免指标过载。</p>
+                  <span class="pill">今天</span>
+                </div>
+                <div class="note-card">
+                  <strong>补齐筛选条件</strong>
+                  <p>状态、时间、负责人保持统一体验。</p>
+                  <span class="pill orange">待确认</span>
+                </div>
+              </div>
+              <div class="kanban-col">
+                <h3 class="kanban-title">进行中</h3>
+                <div class="note-card">
+                  <strong>看板视觉改造</strong>
+                  <p>白色卡片、轻边框、品牌红只做重点动作。</p>
+                  <span class="pill red">重点</span>
+                </div>
+                <div class="note-card">
+                  <strong>表格交互优化</strong>
+                  <p>筛选、搜索、抽屉详情可直接操作。</p>
+                  <span class="pill green">顺利</span>
+                </div>
+              </div>
+              <div class="kanban-col">
+                <h3 class="kanban-title">已完成</h3>
+                <div class="note-card">
+                  <strong>导航层级梳理</strong>
+                  <p>常用功能前置，低频配置收进系统区域。</p>
+                  <span class="pill">已完成</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="drawer-mask" id="drawerMask"></div>
+  <aside class="drawer" aria-label="详情抽屉">
+    <div class="drawer-head">
+      <h3>任务详情</h3>
+      <button class="drawer-close" id="drawerClose" aria-label="关闭">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="detail-hero">
+        <span class="pill red">需要你确认</span>
+        <h3 style="margin:0;font-size:18px;line-height:26px;">异常数据同步任务</h3>
+        <p style="margin:0;color:var(--paragraph);font-size:14px;line-height:22px;">这里适合承载你现有后台里的详情、审核、配置或表单操作，不再跳转到新页面。</p>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-item"><span>影响记录</span><strong>17</strong></div>
+        <div class="detail-item"><span>优先级</span><strong>高</strong></div>
+        <div class="detail-item"><span>负责人</span><strong>你</strong></div>
+        <div class="detail-item"><span>状态</span><strong>待处理</strong></div>
+      </div>
+      <div class="card card-pad">
+        <div class="section-title">
+          <div>
+            <h2>处理建议</h2>
+            <p>保留具体动作，减少说明文字。</p>
+          </div>
+        </div>
+        <div class="task-list">
+          <div class="task">
+            <div><strong>重新拉取失败批次</strong><span>预计耗时 30 秒</span></div>
+            <button class="btn secondary">执行</button>
+          </div>
+          <div class="task">
+            <div><strong>忽略低风险记录</strong><span>保留操作日志</span></div>
+            <button class="btn secondary">忽略</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn primary" style="width:100%;">确认处理完成</button>
+    </div>
+  </aside>
+
+  <script>
+    const titles = {
+      overview: ["首页工作台", "把核心指标、异常提醒和待办动作放在一个页面里，减少来回跳转。"],
+      analytics: ["数据看板", "用少量关键图表说明趋势，重点关注变化和异常。"],
+      list: ["列表管理", "筛选、搜索、状态和详情抽屉放在一条高效路径里。"],
+      tasks: ["待办流程", "把任务从待开始到完成串起来，适合个人后台日常使用。"]
+    };
+
+    const navItems = document.querySelectorAll(".nav-item[data-screen]");
+    const screens = document.querySelectorAll(".screen");
+    const pageTitle = document.getElementById("pageTitle");
+    const pageDesc = document.getElementById("pageDesc");
+
+    navItems.forEach(item => {
+      item.addEventListener("click", () => {
+        const target = item.dataset.screen;
+        navItems.forEach(n => n.classList.remove("active"));
+        item.classList.add("active");
+        screens.forEach(screen => screen.classList.toggle("active", screen.id === target));
+        pageTitle.textContent = titles[target][0];
+        pageDesc.textContent = titles[target][1];
+        document.body.classList.remove("sidebar-open");
+      });
+    });
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+      });
+    });
+
+    const menuBtn = document.getElementById("menuBtn");
+    const mobileMask = document.getElementById("mobileMask");
+    menuBtn.addEventListener("click", () => document.body.classList.add("sidebar-open"));
+    mobileMask.addEventListener("click", () => document.body.classList.remove("sidebar-open"));
+
+    const drawerMask = document.getElementById("drawerMask");
+    const drawerClose = document.getElementById("drawerClose");
+    const openDrawer = () => document.body.classList.add("drawer-open");
+    const closeDrawer = () => document.body.classList.remove("drawer-open");
+
+    document.querySelectorAll(".open-detail").forEach(btn => btn.addEventListener("click", openDrawer));
+    drawerMask.addEventListener("click", closeDrawer);
+    drawerClose.addEventListener("click", closeDrawer);
+
+    const periodBtn = document.getElementById("periodBtn");
+    const periods = ["近 7 天", "近 30 天", "本季度"];
+    let periodIndex = 0;
+    periodBtn.addEventListener("click", () => {
+      periodIndex = (periodIndex + 1) % periods.length;
+      periodBtn.textContent = periods[periodIndex];
+    });
+
+    const tableSearch = document.getElementById("tableSearch");
+    const statusFilter = document.getElementById("statusFilter");
+    const resetFilter = document.getElementById("resetFilter");
+    const rowCount = document.getElementById("rowCount");
+    const rows = Array.from(document.querySelectorAll("#tableBody tr"));
+
+    function applyFilter() {
+      const q = tableSearch.value.trim().toLowerCase();
+      const status = statusFilter.value;
+      let visible = 0;
+
+      rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const statusMatch = status === "all" || row.dataset.status === status;
+        const queryMatch = !q || text.includes(q);
+        const show = statusMatch && queryMatch;
+        row.style.display = show ? "" : "none";
+        if (show) visible += 1;
+      });
+
+      rowCount.textContent = `共 ${visible} 条记录`;
+    }
+
+    tableSearch.addEventListener("input", applyFilter);
+    statusFilter.addEventListener("change", applyFilter);
+    resetFilter.addEventListener("click", () => {
+      tableSearch.value = "";
+      statusFilter.value = "all";
+      applyFilter();
+    });
+
+    document.getElementById("globalSearch").addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        const listNav = document.querySelector('.nav-item[data-screen="list"]');
+        listNav.click();
+        tableSearch.value = event.currentTarget.value;
+        applyFilter();
+      }
+    });
+
+    document.getElementById("createBtn").addEventListener("click", openDrawer);
+  </script>
+</body>
+</html>

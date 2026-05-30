@@ -74,9 +74,9 @@ existing Cache/MQ/runtime state.
 - Full RBAC, SSO, or organization management in the first Admin UI version.
 - Cache mutation from Admin UI/API: no set, update, delete, or namespace
   invalidation.
-- MQ mutation from Admin UI/API: no send, delete, archive, purge, drop, or ack.
-- Changing Cache/MQ delivery semantics, including the current `Delete`/`Archive`
-  acknowledgement model.
+- MQ mutation from Admin UI/API: no send, ack, archive, visibility change, purge, or drop.
+- Changing Cache/MQ delivery semantics, including the current `Ack`/`Archive`
+  acknowledgement-token model.
 
 ## Proposed Architecture
 

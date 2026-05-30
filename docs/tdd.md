@@ -9,7 +9,7 @@ This change is implemented with a red-green-refactor loop.
 Test layers:
 
 - Rust unit tests: validation, configuration, errors, metrics, and pure domain helpers.
-- Database integration tests: cache schema, MQ schema, cache behavior, queue visibility, archive, redelivery, and concurrent reads. These run when `DATABASE_URL` points to a PostgreSQL database.
+- Database integration tests: cache schema, MQ schema, cache behavior, queue visibility, token-scoped ack, archive, redelivery, and concurrent reads. These run when `DATABASE_URL` points to a PostgreSQL database.
 - Server integration tests: gRPC method behavior, health, readiness, and error mapping.
 - SDK tests: Rust, Go, and Python client shape and conformance.
 - End-to-end smoke tests: PostgreSQL plus the Rust server plus SDK calls.

@@ -13,7 +13,7 @@ _GENERATED_ROOT = Path(__file__).resolve().parent / "gen"
 if str(_GENERATED_ROOT) not in sys.path:
     sys.path.insert(0, str(_GENERATED_ROOT))
 
-from pgapp.v1 import cache_pb2, cache_pb2_grpc, mq_pb2, mq_pb2_grpc  # type: ignore[import-not-found]  # noqa: E402
+from pgapp.v1 import cache_pb2, cache_pb2_grpc, config_pb2, config_pb2_grpc, mq_pb2, mq_pb2_grpc  # type: ignore[import-not-found]  # noqa: E402
 
 type JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 type QueueStorageMode = Literal["durable", "transient"]
@@ -80,6 +80,7 @@ class _QueueMessageProto(Protocol):
     enqueued_at: str
     visibility_timeout_at: str
     json_payload: str
+    ack_token: str
 
 
 class _ReadMessagesResponse(Protocol):
@@ -91,6 +92,29 @@ class _QueueMetricsResponse(Protocol):
     in_flight_message_count: int
     oldest_visible_message_age_seconds: int
     archived_message_count: int
+
+
+class _ConfigScopeProto(Protocol):
+    app_id: str
+    environment: str
+    cluster: str
+    namespace: str
+
+
+class _ConfigReleaseProto(Protocol):
+    scope: _ConfigScopeProto
+    revision: int
+    checksum: str
+    snapshot_json: str
+    message: str
+    published_by: str
+    published_at: str
+
+
+class _WatchConfigResponse(Protocol):
+    changed: bool
+    latest_revision: int
+    release: _ConfigReleaseProto
 
 
 @dataclass(frozen=True)
@@ -126,6 +150,7 @@ class MQMessage:
     read_count: int
     enqueued_at: str
     visibility_timeout_at: str
+    ack_token: str
     payload: JsonValue
 
 
@@ -135,6 +160,32 @@ class QueueMetrics:
     in_flight_message_count: int
     oldest_visible_message_age_seconds: int
     archived_message_count: int
+
+
+@dataclass(frozen=True)
+class ConfigScope:
+    app_id: str
+    environment: str
+    cluster: str
+    namespace: str
+
+
+@dataclass(frozen=True)
+class ConfigRelease:
+    scope: ConfigScope
+    revision: int
+    checksum: str
+    snapshot: dict[str, JsonValue]
+    message: str
+    published_by: str
+    published_at: str
+
+
+@dataclass(frozen=True)
+class ConfigWatchResult:
+    changed: bool
+    latest_revision: int
+    release: ConfigRelease | None
 
 
 class PGAppError(Exception):
@@ -151,6 +202,7 @@ class PGAppClient:
     channel: grpc.Channel
     cache: CacheClient
     mq: MQClient
+    config: ConfigClient
 
     def __init__(
         self,
@@ -163,6 +215,7 @@ class PGAppClient:
         self.channel = channel if channel is not None else grpc.insecure_channel(endpoint)
         self.cache = CacheClient(self)
         self.mq = MQClient(self)
+        self.config = ConfigClient(self)
 
 
 class CacheClient:
@@ -394,21 +447,23 @@ class MQClient:
         )
         return [self._message_from_proto(message) for message in response.messages]
 
-    def delete(self, queue_name: str, message_id: int) -> bool:
-        request: object = mq_pb2.DeleteMessageRequest(
+    def ack(self, queue_name: str, message_id: int, ack_token: str) -> bool:
+        request: object = mq_pb2.AckMessageRequest(
             queue_name=queue_name,
             message_id=message_id,
+            ack_token=ack_token,
         )
         response = self._call(
-            cast(_UnaryUnary[_OperationResult], getattr(self._stub, "Delete")),
+            cast(_UnaryUnary[_OperationResult], getattr(self._stub, "Ack")),
             request,
         )
         return bool(response.success)
 
-    def archive(self, queue_name: str, message_id: int) -> bool:
+    def archive(self, queue_name: str, message_id: int, ack_token: str) -> bool:
         request: object = mq_pb2.ArchiveMessageRequest(
             queue_name=queue_name,
             message_id=message_id,
+            ack_token=ack_token,
         )
         response = self._call(
             cast(_UnaryUnary[_OperationResult], getattr(self._stub, "Archive")),
@@ -420,11 +475,13 @@ class MQClient:
         self,
         queue_name: str,
         message_id: int,
+        ack_token: str,
         visibility_timeout_seconds: int,
     ) -> bool:
         request: object = mq_pb2.SetVisibilityTimeoutRequest(
             queue_name=queue_name,
             message_id=message_id,
+            ack_token=ack_token,
             visibility_timeout_seconds=visibility_timeout_seconds,
         )
         response = self._call(
@@ -470,5 +527,113 @@ class MQClient:
             read_count=int(message.read_count),
             enqueued_at=message.enqueued_at,
             visibility_timeout_at=message.visibility_timeout_at,
+            ack_token=message.ack_token,
             payload=cast(JsonValue, json.loads(message.json_payload)),
+        )
+
+
+class ConfigClient:
+    client: PGAppClient
+    _stub: object
+
+    def __init__(self, client: PGAppClient) -> None:
+        self.client = client
+        self._stub = config_pb2_grpc.ConfigServiceStub(client.channel)
+
+    def scope(
+        self,
+        app_id: str,
+        environment: str,
+        cluster: str,
+        namespace: str,
+    ) -> ConfigScope:
+        return ConfigScope(
+            app_id=app_id,
+            environment=environment,
+            cluster=cluster,
+            namespace=namespace,
+        )
+
+    def encode_json(self, value: JsonValue) -> str:
+        try:
+            return json.dumps(value, separators=(",", ":"), sort_keys=True)
+        except (TypeError, ValueError) as exc:
+            raise PGAppError(
+                "config value must be JSON serializable",
+                status_code="invalid_argument",
+            ) from exc
+
+    def get_latest_release(self, scope: ConfigScope) -> ConfigRelease:
+        return self.get_release(scope, revision=0)
+
+    def get_release(self, scope: ConfigScope, revision: int) -> ConfigRelease:
+        request: object = config_pb2.GetConfigReleaseRequest(
+            scope=self._scope_to_proto(scope),
+            revision=revision,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_ConfigReleaseProto], getattr(self._stub, "GetRelease")),
+            request,
+        )
+        return self._release_from_proto(response)
+
+    def watch(
+        self,
+        scope: ConfigScope,
+        known_revision: int,
+        timeout_seconds: int,
+    ) -> ConfigWatchResult:
+        request: object = config_pb2.WatchConfigRequest(
+            scope=self._scope_to_proto(scope),
+            known_revision=known_revision,
+            timeout_seconds=timeout_seconds,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_WatchConfigResponse], getattr(self._stub, "Watch")),
+            request,
+        )
+        release = None
+        if bool(response.changed):
+            release = self._release_from_proto(response.release)
+        return ConfigWatchResult(
+            changed=bool(response.changed),
+            latest_revision=int(response.latest_revision),
+            release=release,
+        )
+
+    def _call(self, method: _UnaryUnary[ResponseT], request: object) -> ResponseT:
+        try:
+            return method(request, timeout=self.client.timeout)
+        except grpc.RpcError as exc:
+            status = exc.code()
+            status_code = status.name if status is not None else None
+            details = exc.details() or str(exc)
+            raise PGAppError(details, status_code=status_code) from exc
+
+    def _scope_to_proto(self, scope: ConfigScope) -> object:
+        return config_pb2.ConfigScope(
+            app_id=scope.app_id,
+            environment=scope.environment,
+            cluster=scope.cluster,
+            namespace=scope.namespace,
+        )
+
+    def _scope_from_proto(self, scope: _ConfigScopeProto) -> ConfigScope:
+        return ConfigScope(
+            app_id=scope.app_id,
+            environment=scope.environment,
+            cluster=scope.cluster,
+            namespace=scope.namespace,
+        )
+
+    def _release_from_proto(self, release: _ConfigReleaseProto) -> ConfigRelease:
+        snapshot = cast(dict[str, JsonValue], json.loads(release.snapshot_json or "{}"))
+        return ConfigRelease(
+            scope=self._scope_from_proto(release.scope),
+            revision=int(release.revision),
+            checksum=release.checksum,
+            snapshot=snapshot,
+            message=release.message,
+            published_by=release.published_by,
+            published_at=release.published_at,
         )

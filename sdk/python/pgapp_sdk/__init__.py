@@ -1,6 +1,9 @@
 from .client import (
     CacheItem,
     CacheStats,
+    ConfigRelease,
+    ConfigScope,
+    ConfigWatchResult,
     MQMessage,
     NamespaceUsage,
     PGAppClient,
@@ -11,6 +14,9 @@ from .client import (
 __all__: list[str] = [
     "CacheItem",
     "CacheStats",
+    "ConfigRelease",
+    "ConfigScope",
+    "ConfigWatchResult",
     "MQMessage",
     "NamespaceUsage",
     "PGAppClient",

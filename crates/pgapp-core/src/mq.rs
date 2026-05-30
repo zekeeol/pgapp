@@ -46,6 +46,7 @@ pub struct QueueMessage {
     pub read_count: i32,
     pub enqueued_at: DateTime<Utc>,
     pub visibility_timeout_at: Option<DateTime<Utc>>,
+    pub ack_token: String,
     pub payload: Value,
 }
 
@@ -162,12 +163,13 @@ impl MqStore {
             )
             UPDATE mq_messages m
             SET visibility_timeout_at = now() + ($3::double precision * interval '1 second'),
+                ack_token = md5(m.id::text || ':' || (m.read_count + 1)::text || ':' || clock_timestamp()::text || ':' || random()::text),
                 read_count = read_count + 1,
                 last_read_at = now(),
                 updated_at = now()
             FROM picked
             WHERE m.id = picked.id
-            RETURNING m.id, m.read_count, m.created_at, m.visibility_timeout_at, m.payload
+            RETURNING m.id, m.read_count, m.created_at, m.visibility_timeout_at, m.ack_token, m.payload
             "#,
         )
         .bind(queue_id)
@@ -209,25 +211,49 @@ impl MqStore {
         }
     }
 
-    pub async fn delete(&self, queue_name: &str, message_id: i64) -> PgAppResult<bool> {
+    pub async fn ack(
+        &self,
+        queue_name: &str,
+        message_id: i64,
+        ack_token: &str,
+    ) -> PgAppResult<bool> {
+        validate_ack_token(ack_token)?;
         let queue_id = self.queue_id(queue_name).await?;
-        let deleted = sqlx::query("DELETE FROM mq_messages WHERE queue_id = $1 AND id = $2")
-            .bind(queue_id)
-            .bind(message_id)
-            .execute(&self.pool)
-            .await?
-            .rows_affected();
+        let deleted = sqlx::query(
+            r#"
+            DELETE FROM mq_messages
+            WHERE queue_id = $1
+              AND id = $2
+              AND ack_token = $3
+              AND visibility_timeout_at > now()
+            "#,
+        )
+        .bind(queue_id)
+        .bind(message_id)
+        .bind(ack_token)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
         Ok(deleted > 0)
     }
 
-    pub async fn archive(&self, queue_name: &str, message_id: i64) -> PgAppResult<bool> {
+    pub async fn archive(
+        &self,
+        queue_name: &str,
+        message_id: i64,
+        ack_token: &str,
+    ) -> PgAppResult<bool> {
+        validate_ack_token(ack_token)?;
         let queue_id = self.queue_id(queue_name).await?;
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
             r#"
             WITH moved AS (
               DELETE FROM mq_messages
-              WHERE queue_id = $1 AND id = $2
+              WHERE queue_id = $1
+                AND id = $2
+                AND ack_token = $3
+                AND visibility_timeout_at > now()
               RETURNING id, queue_id, payload, headers, read_count, created_at
             )
             INSERT INTO mq_archives(queue_id, original_message_id, payload, headers, read_count, enqueued_at)
@@ -237,6 +263,7 @@ impl MqStore {
         )
         .bind(queue_id)
         .bind(message_id)
+        .bind(ack_token)
         .execute(&mut *tx)
         .await?
         .rows_affected();
@@ -248,8 +275,10 @@ impl MqStore {
         &self,
         queue_name: &str,
         message_id: i64,
+        ack_token: &str,
         visibility_timeout_seconds: i64,
     ) -> PgAppResult<bool> {
+        validate_ack_token(ack_token)?;
         validate_non_negative_seconds("visibility_timeout_seconds", visibility_timeout_seconds)?;
         self.validate_visibility_timeout(visibility_timeout_seconds)?;
         let queue_id = self.queue_id(queue_name).await?;
@@ -258,12 +287,16 @@ impl MqStore {
             UPDATE mq_messages
             SET visibility_timeout_at = now() + ($3::double precision * interval '1 second'),
                 updated_at = now()
-            WHERE queue_id = $1 AND id = $2
+            WHERE queue_id = $1
+              AND id = $2
+              AND ack_token = $4
+              AND visibility_timeout_at > now()
             "#,
         )
         .bind(queue_id)
         .bind(message_id)
         .bind(visibility_timeout_seconds as f64)
+        .bind(ack_token)
         .execute(&self.pool)
         .await?
         .rows_affected();
@@ -376,8 +409,25 @@ fn row_to_message(row: sqlx::postgres::PgRow) -> PgAppResult<QueueMessage> {
         read_count: row.try_get("read_count")?,
         enqueued_at: row.try_get("created_at")?,
         visibility_timeout_at: row.try_get("visibility_timeout_at")?,
+        ack_token: row
+            .try_get::<Option<String>, _>("ack_token")?
+            .unwrap_or_default(),
         payload: row.try_get("payload")?,
     })
+}
+
+fn validate_ack_token(ack_token: &str) -> PgAppResult<()> {
+    if ack_token.trim().is_empty() {
+        return Err(PgAppError::InvalidArgument(
+            "ack_token must not be empty".to_string(),
+        ));
+    }
+    if ack_token.len() > 256 {
+        return Err(PgAppError::InvalidArgument(
+            "ack_token must be at most 256 bytes".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

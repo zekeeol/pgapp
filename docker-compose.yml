@@ -22,6 +22,7 @@ services:
     environment:
       DATABASE_URL: postgres://pgapp:secret@postgres:5432/pgapp
       PGAPP_BIND_ADDR: 0.0.0.0:50051
+      PGAPP_ENABLE_CONFIG: "true"
       PGAPP_ENABLE_ADMIN: "true"
       PGAPP_ADMIN_BIND_ADDR: 0.0.0.0:8080
       PGAPP_ADMIN_TOKEN: ${PGAPP_ADMIN_TOKEN:-change-me-local-admin-token}

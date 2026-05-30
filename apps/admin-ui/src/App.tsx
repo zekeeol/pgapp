@@ -1,17 +1,23 @@
 import {
   Activity,
+  Braces,
   Clock,
   Database,
   FileText,
   LayoutDashboard,
   MessageSquareText,
+  Rocket,
+  Save,
+  Search,
   Server,
+  ShieldCheck,
+  Settings2,
   UsersRound
 } from "lucide-react";
 import type { ComponentType, DependencyList, ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-type View = "overview" | "cache" | "mq" | "logs" | "clients";
+type View = "overview" | "cache" | "mq" | "config" | "logs" | "clients";
 
 type Page<T> = {
   items: T[];
@@ -94,6 +100,40 @@ type ClientActivity = {
   api_activity: MethodMetric[];
 };
 
+type ConfigScope = {
+  app_id: string;
+  environment: string;
+  cluster: string;
+  namespace: string;
+};
+
+type ConfigScopeSummary = {
+  scope: ConfigScope;
+  current_revision: number;
+};
+
+type ConfigDraftItem = {
+  key: string;
+  value: unknown;
+  deleted: boolean;
+  updated_at: string;
+};
+
+type ConfigDraft = {
+  scope: ConfigScope;
+  items: ConfigDraftItem[];
+};
+
+type ConfigRelease = {
+  scope: ConfigScope;
+  revision: number;
+  checksum: string;
+  snapshot: unknown;
+  message: string;
+  published_by: string;
+  published_at: string;
+};
+
 type LoadState<T> =
   | { status: "loading" }
   | { status: "error"; message: string }
@@ -103,17 +143,23 @@ const navItems: Array<{ view: View; label: string; icon: ComponentType<{ size?: 
   { view: "overview", label: "Overview", icon: LayoutDashboard },
   { view: "cache", label: "Cache", icon: Database },
   { view: "mq", label: "MQ", icon: MessageSquareText },
+  { view: "config", label: "Config", icon: Settings2 },
   { view: "logs", label: "Logs", icon: FileText },
   { view: "clients", label: "Clients", icon: UsersRound }
 ];
 
-async function fetchJson<T>(path: string): Promise<T> {
+async function fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = window.sessionStorage.getItem("pgapp_admin_token");
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const response = await fetch(path, { headers });
+  let response: Response;
+  try {
+    response = await fetch(path, { ...init, headers: { ...headers, ...init.headers } });
+  } catch {
+    throw new Error("Admin API unavailable");
+  }
   if (!response.ok) {
     let message = `Request failed with ${response.status}`;
     try {
@@ -125,6 +171,14 @@ async function fetchJson<T>(path: string): Promise<T> {
     throw new Error(message);
   }
   return (await response.json()) as T;
+}
+
+async function sendJson<T>(path: string, method: "PUT" | "POST", body: unknown): Promise<T> {
+  return fetchJson<T>(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
 }
 
 function useAsyncData<T>(
@@ -177,8 +231,13 @@ export default function App(): ReactElement {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <Server size={20} />
-          <span>pgapp Admin</span>
+          <div className="brand-mark">
+            <Server size={18} />
+          </div>
+          <div className="brand-copy">
+            <span>pgapp Admin</span>
+            <small>PostgreSQL-first ops</small>
+          </div>
         </div>
         <nav className="nav-list" aria-label="Admin sections">
           {navItems.map((item) => {
@@ -197,21 +256,40 @@ export default function App(): ReactElement {
             );
           })}
         </nav>
+        <div className="sidebar-note">
+          <strong>PG-first control plane</strong>
+          <span>Cache, MQ, Config, logs, and client activity backed by PostgreSQL.</span>
+        </div>
       </aside>
       <section className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">local admin</p>
-            <h1>{titleFor(view)}</h1>
+          <label className="global-search">
+            <Search size={17} />
+            <input aria-label="Search admin resources" type="search" placeholder="Search Cache, MQ, Config, logs..." />
+          </label>
+          <div className="top-actions">
+            <span className="icon-status" aria-label="Admin token stored">
+              <ShieldCheck size={17} />
+            </span>
+            <StatusPill state={overview.status === "ready" ? overview.data.server_state : "loading"} />
           </div>
-          <StatusPill state={overview.status === "ready" ? overview.data.server_state : "loading"} />
         </header>
-        {!tokenReady && <TokenPrompt onSave={() => setTokenReady(true)} />}
-        {tokenReady && view === "overview" && <OverviewView state={overview} />}
-        {tokenReady && view === "cache" && <CacheView />}
-        {tokenReady && view === "mq" && <MqView />}
-        {tokenReady && view === "logs" && <LogsView />}
-        {tokenReady && view === "clients" && <ClientsView />}
+        <div className="page">
+          <header className="page-head">
+            <div>
+              <p className="eyebrow">local admin</p>
+              <h1>{titleFor(view)}</h1>
+              <p className="head-desc">{descriptionFor(view)}</p>
+            </div>
+          </header>
+          {!tokenReady && <TokenPrompt onSave={() => setTokenReady(true)} />}
+          {tokenReady && view === "overview" && <OverviewView state={overview} />}
+          {tokenReady && view === "cache" && <CacheView />}
+          {tokenReady && view === "mq" && <MqView />}
+          {tokenReady && view === "config" && <ConfigView />}
+          {tokenReady && view === "logs" && <LogsView />}
+          {tokenReady && view === "clients" && <ClientsView />}
+        </div>
       </section>
     </main>
   );
@@ -249,11 +327,23 @@ function TokenPrompt({ onSave }: { onSave: () => void }): ReactElement {
 
 function titleFor(view: View): string {
   return {
-    overview: "Overview",
+    overview: "PGApp Console",
     cache: "Cache",
     mq: "MQ",
+    config: "Config",
     logs: "Logs",
     clients: "Clients"
+  }[view];
+}
+
+function descriptionFor(view: View): string {
+  return {
+    overview: "A PostgreSQL-backed operational surface for service health, traffic, and storage state.",
+    cache: "Inspect namespace usage and cached entry previews without mutating runtime data.",
+    mq: "Review queues and message previews while preserving delivery and acknowledgement state.",
+    config: "Manage scoped JSON drafts, publish immutable releases, and inspect release history.",
+    logs: "Trace persisted admin and service events from the server-side PostgreSQL log store.",
+    clients: "Observe Admin sessions and API method activity across SDK and console traffic."
   }[view];
 }
 
@@ -368,6 +458,215 @@ function MqView(): ReactElement {
           mapRow={(row) => [row.message_id, row.queue_name, row.read_count, row.payload_preview]}
           empty="No messages"
         />
+      </section>
+    </div>
+  );
+}
+
+function ConfigView(): ReactElement {
+  const scopes = useAsyncData<Page<ConfigScopeSummary>>(
+    () => fetchJson("/api/admin/config/scopes?limit=50&offset=0"),
+    []
+  );
+  const [selectedScopeId, setSelectedScopeId] = useState<string>("");
+  if (scopes.status !== "ready") {
+    return <StateMessage state={scopes} />;
+  }
+  const selected =
+    scopes.data.items.find((item) => scopeId(item.scope) === selectedScopeId)?.scope ??
+    scopes.data.items[0]?.scope;
+  if (!selected) {
+    return (
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>Scopes</h2>
+        </div>
+        <p className="empty">No config scopes</p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="config-layout">
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>Scopes</h2>
+        </div>
+        <ScopeList
+          scopes={scopes.data.items}
+          selected={scopeId(selected)}
+          onSelect={setSelectedScopeId}
+        />
+      </section>
+      <ConfigDetails scope={selected} />
+    </div>
+  );
+}
+
+function ScopeList({
+  scopes,
+  selected,
+  onSelect
+}: {
+  scopes: ConfigScopeSummary[];
+  selected: string;
+  onSelect: (id: string) => void;
+}): ReactElement {
+  if (scopes.length === 0) {
+    return <p className="empty">No config scopes</p>;
+  }
+  return (
+    <div className="scope-list">
+      {scopes.map((item) => {
+        const id = scopeId(item.scope);
+        return (
+          <button
+            key={id}
+            type="button"
+            className={id === selected ? "scope-row active" : "scope-row"}
+            aria-label={`Select scope ${item.scope.app_id}`}
+            onClick={() => onSelect(id)}
+          >
+            <strong>{item.scope.app_id}</strong>
+            <span>{item.scope.environment}</span>
+            <span>{item.scope.cluster}</span>
+            <span>{item.scope.namespace}</span>
+            <small>Revision {item.current_revision}</small>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ConfigDetails({ scope }: { scope: ConfigScope }): ReactElement {
+  const query = scopeQuery(scope);
+  const draft = useAsyncData<ConfigDraft>(() => fetchJson(`/api/admin/config/draft?${query}`), [query]);
+  const releases = useAsyncData<Page<ConfigRelease>>(
+    () => fetchJson(`/api/admin/config/releases?${query}`),
+    [query]
+  );
+  const [selectedKey, setSelectedKey] = useState<string>("");
+  const [jsonValue, setJsonValue] = useState<string>("{\n}");
+  const [feedback, setFeedback] = useState<string>("");
+
+  useEffect(() => {
+    if (draft.status !== "ready") {
+      return;
+    }
+    const first = draft.data.items.find((item) => !item.deleted) ?? draft.data.items[0];
+    if (!first) {
+      setSelectedKey("");
+      setJsonValue("{\n}");
+      return;
+    }
+    setSelectedKey(first.key);
+    setJsonValue(JSON.stringify(first.value, null, 2));
+  }, [draft.status === "ready" ? JSON.stringify(draft.data.items) : draft.status]);
+
+  async function saveItem(): Promise<void> {
+    setFeedback("");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonValue);
+    } catch {
+      setFeedback("Invalid JSON");
+      return;
+    }
+    if (!selectedKey.trim()) {
+      setFeedback("Key required");
+      return;
+    }
+    await sendJson<{ success: boolean }>("/api/admin/config/items", "PUT", {
+      scope,
+      key: selectedKey.trim(),
+      value: parsed
+    });
+    setFeedback("Draft saved");
+  }
+
+  async function publish(): Promise<void> {
+    setFeedback("");
+    await sendJson<ConfigRelease>("/api/admin/config/releases", "POST", {
+      scope,
+      message: "Admin UI publish",
+      published_by: "admin-ui"
+    });
+    setFeedback("Release published");
+  }
+
+  return (
+    <div className="config-detail">
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>Draft items</h2>
+        </div>
+        {draft.status === "ready" ? (
+          <DataTable
+            columns={["key", "state", "value"]}
+            rows={draft.data.items.map((item) => [
+              item.key,
+              item.deleted ? "deleted" : "active",
+              item.deleted ? "" : compactJson(item.value)
+            ])}
+            empty="No draft items"
+          />
+        ) : (
+          <StateMessage state={draft} />
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>JSON editor</h2>
+          <div className="toolbar">
+            <button type="button" className="icon-button" aria-label="Save config item" onClick={() => void saveItem()}>
+              <Save size={16} />
+              <span>Save</span>
+            </button>
+            <button type="button" className="icon-button primary" aria-label="Publish config release" onClick={() => void publish()}>
+              <Rocket size={16} />
+              <span>Publish</span>
+            </button>
+          </div>
+        </div>
+        <div className="editor-body">
+          <label>
+            <span>Key</span>
+            <input value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)} />
+          </label>
+          <label>
+            <span>Value</span>
+            <textarea
+              aria-label="Config JSON value"
+              value={jsonValue}
+              onChange={(event) => setJsonValue(event.target.value)}
+              spellCheck={false}
+            />
+          </label>
+          {feedback && <p className={feedback === "Invalid JSON" ? "state error compact" : "state compact"}>{feedback}</p>}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>Release history</h2>
+          <Braces size={17} />
+        </div>
+        {releases.status === "ready" ? (
+          <DataTable
+            columns={["revision", "checksum", "message", "snapshot"]}
+            rows={releases.data.items.map((release) => [
+              `Revision ${release.revision}`,
+              release.checksum,
+              release.message,
+              compactJson(release.snapshot)
+            ])}
+            empty="No releases"
+          />
+        ) : (
+          <StateMessage state={releases} />
+        )}
       </section>
     </div>
   );
@@ -517,4 +816,22 @@ function StateMessage<T>({ state }: { state: LoadState<T> }): ReactElement {
 
 function sumErrors(methods: MethodMetric[]): number {
   return methods.reduce((total, metric) => total + metric.errors, 0);
+}
+
+function scopeQuery(scope: ConfigScope): string {
+  const params = new URLSearchParams({
+    app_id: scope.app_id,
+    environment: scope.environment,
+    cluster: scope.cluster,
+    namespace: scope.namespace
+  });
+  return params.toString();
+}
+
+function scopeId(scope: ConfigScope): string {
+  return `${scope.app_id}/${scope.environment}/${scope.cluster}/${scope.namespace}`;
+}
+
+function compactJson(value: unknown): string {
+  return JSON.stringify(value);
 }

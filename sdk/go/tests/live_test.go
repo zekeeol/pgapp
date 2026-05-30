@@ -6,8 +6,11 @@ import (
 	"testing"
 	"time"
 
+	pb "github.com/zekee/pgapp/sdk/go/gen/pgapp/v1"
 	pgapp "github.com/zekee/pgapp/sdk/go/pgapp"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -49,9 +52,12 @@ func TestLiveGoSDKCacheAndMQ(t *testing.T) {
 	if len(messages) != 1 || messages[0].MessageId != messageID {
 		t.Fatalf("unexpected messages: %#v", messages)
 	}
-	ok, err = client.MQ().Delete(context.Background(), queue, messageID)
+	if messages[0].AckToken == "" {
+		t.Fatal("expected ack token")
+	}
+	ok, err = client.MQ().Ack(context.Background(), queue, messageID, messages[0].AckToken)
 	if err != nil || !ok {
-		t.Fatalf("delete failed: ok=%v err=%v", ok, err)
+		t.Fatalf("ack failed: ok=%v err=%v", ok, err)
 	}
 }
 
@@ -110,11 +116,11 @@ func TestLiveGoSDKExposesPhaseOneSurface(t *testing.T) {
 	if err != nil || len(messages) != 1 {
 		t.Fatalf("unexpected long poll: messages=%#v err=%v", messages, err)
 	}
-	ok, err = client.MQ().SetVisibilityTimeout(context.Background(), queue, messages[0].MessageId, 0)
+	ok, err = client.MQ().SetVisibilityTimeout(context.Background(), queue, messages[0].MessageId, messages[0].AckToken, 30)
 	if err != nil || !ok {
 		t.Fatalf("set vt failed: ok=%v err=%v", ok, err)
 	}
-	ok, err = client.MQ().Archive(context.Background(), queue, messages[0].MessageId)
+	ok, err = client.MQ().Archive(context.Background(), queue, messages[0].MessageId, messages[0].AckToken)
 	if err != nil || !ok {
 		t.Fatalf("archive failed: ok=%v err=%v", ok, err)
 	}
@@ -129,6 +135,54 @@ func TestLiveGoSDKExposesPhaseOneSurface(t *testing.T) {
 	ok, err = client.MQ().DropQueue(context.Background(), queue)
 	if err != nil || !ok {
 		t.Fatalf("drop failed: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestLiveGoSDKConfigReadAndWatch(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	client, err := pgapp.Dial(context.Background(), endpoint, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := pgapp.NewConfigScope(
+		fmt.Sprintf("go_sdk_config_%d", time.Now().UnixNano()),
+		"prod",
+		"default",
+		"application",
+	)
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	generated := pb.NewConfigServiceClient(conn)
+	if _, err := generated.UpsertItem(context.Background(), &pb.UpsertConfigItemRequest{
+		Scope:     scope,
+		Key:       "feature_flags",
+		JsonValue: `{"enabled":true}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := generated.Publish(context.Background(), &pb.PublishConfigRequest{
+		Scope:       scope,
+		Message:     "sdk release",
+		PublishedBy: "go-sdk-test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	release, err := client.Config().GetLatestRelease(context.Background(), scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release.Revision != 1 || release.Snapshot["feature_flags"] == nil {
+		t.Fatalf("unexpected config release: %#v", release)
+	}
+	watch, err := client.Config().Watch(context.Background(), scope, release.Revision, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if watch.Changed || watch.LatestRevision != release.Revision || watch.Release != nil {
+		t.Fatalf("unexpected watch no-change result: %#v", watch)
 	}
 }
 

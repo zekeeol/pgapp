@@ -70,9 +70,9 @@ class MQServiceStub(object):
                 request_serializer=pgapp_dot_v1_dot_mq__pb2.ReadWithPollRequest.SerializeToString,
                 response_deserializer=pgapp_dot_v1_dot_mq__pb2.ReadMessagesResponse.FromString,
                 _registered_method=True)
-        self.Delete = channel.unary_unary(
-                '/pgapp.v1.MQService/Delete',
-                request_serializer=pgapp_dot_v1_dot_mq__pb2.DeleteMessageRequest.SerializeToString,
+        self.Ack = channel.unary_unary(
+                '/pgapp.v1.MQService/Ack',
+                request_serializer=pgapp_dot_v1_dot_mq__pb2.AckMessageRequest.SerializeToString,
                 response_deserializer=pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
                 _registered_method=True)
         self.Archive = channel.unary_unary(
@@ -137,7 +137,7 @@ class MQServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Delete(self, request, context):
+    def Ack(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -199,9 +199,9 @@ def add_MQServiceServicer_to_server(servicer, server):
                     request_deserializer=pgapp_dot_v1_dot_mq__pb2.ReadWithPollRequest.FromString,
                     response_serializer=pgapp_dot_v1_dot_mq__pb2.ReadMessagesResponse.SerializeToString,
             ),
-            'Delete': grpc.unary_unary_rpc_method_handler(
-                    servicer.Delete,
-                    request_deserializer=pgapp_dot_v1_dot_mq__pb2.DeleteMessageRequest.FromString,
+            'Ack': grpc.unary_unary_rpc_method_handler(
+                    servicer.Ack,
+                    request_deserializer=pgapp_dot_v1_dot_mq__pb2.AckMessageRequest.FromString,
                     response_serializer=pgapp_dot_v1_dot_common__pb2.OperationResult.SerializeToString,
             ),
             'Archive': grpc.unary_unary_rpc_method_handler(
@@ -420,7 +420,7 @@ class MQService(object):
             _registered_method=True)
 
     @staticmethod
-    def Delete(request,
+    def Ack(request,
             target,
             options=(),
             channel_credentials=None,
@@ -433,8 +433,8 @@ class MQService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/pgapp.v1.MQService/Delete',
-            pgapp_dot_v1_dot_mq__pb2.DeleteMessageRequest.SerializeToString,
+            '/pgapp.v1.MQService/Ack',
+            pgapp_dot_v1_dot_mq__pb2.AckMessageRequest.SerializeToString,
             pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
             options,
             channel_credentials,

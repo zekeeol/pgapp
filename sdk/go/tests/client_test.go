@@ -20,6 +20,9 @@ func TestClientKeepsEndpointAndTimeout(t *testing.T) {
 	if client.Cache() == nil || client.MQ() == nil {
 		t.Fatal("expected cache and mq clients")
 	}
+	if client.Config() == nil {
+		t.Fatal("expected config client")
+	}
 }
 
 func TestClientReportsNotConnectedForConfigOnlyClient(t *testing.T) {
@@ -38,7 +41,7 @@ func TestDialCreatesGeneratedGrpcWrappers(t *testing.T) {
 	if client.Endpoint() != "127.0.0.1:1" {
 		t.Fatalf("unexpected endpoint: %s", client.Endpoint())
 	}
-	if client.Cache() == nil || client.MQ() == nil {
-		t.Fatal("expected cache and mq wrappers")
+	if client.Cache() == nil || client.MQ() == nil || client.Config() == nil {
+		t.Fatal("expected cache, mq, and config wrappers")
 	}
 }

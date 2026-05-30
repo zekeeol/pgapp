@@ -41,7 +41,7 @@ The MQ service MUST support sending one message or a batch of messages to a queu
 - **THEN** the service MUST return three message ids
 
 ### Requirement: Message consumption and visibility timeout
-The MQ service MUST support reading available messages with a requested quantity and visibility timeout. A read message MUST become invisible to other consumers until it is deleted, archived, or its visibility timeout expires.
+The MQ service MUST support reading available messages with a requested quantity and visibility timeout. A read message MUST become invisible to other consumers until it is acknowledged, archived, or its visibility timeout expires.
 
 #### Scenario: Read hides message during visibility timeout
 - **WHEN** consumer `A` reads message `M` with a 30 second visibility timeout
@@ -52,26 +52,30 @@ The MQ service MUST support reading available messages with a requested quantity
 - **THEN** the same visible message MUST NOT be returned to more than one consumer within the same visibility timeout window
 
 #### Scenario: Unacknowledged message is redelivered
-- **WHEN** a consumer reads message `M` and does not delete or archive it before the visibility timeout expires
+- **WHEN** a consumer reads message `M` and does not acknowledge or archive it before the visibility timeout expires
 - **THEN** message `M` MUST become eligible for a later read
 
 #### Scenario: Read response includes metadata
 - **WHEN** a consumer reads messages from a queue
-- **THEN** each returned message MUST include message id, read count, enqueue time, visibility timeout time, and payload
+- **THEN** each returned message MUST include message id, read count, enqueue time, visibility timeout time, payload, and an acknowledgement token scoped to that delivery
 
 ### Requirement: Acknowledgement, archive, and visibility management
-The MQ service MUST support deleting a message, archiving a message, and updating a message visibility timeout.
+The MQ service MUST support acknowledging a message with a per-delivery token, archiving a message with a per-delivery token, and updating a message visibility timeout with a per-delivery token.
 
-#### Scenario: Delete acknowledges a message
-- **WHEN** a client deletes message `M` after reading it
+#### Scenario: Ack confirms a current delivery
+- **WHEN** a client acknowledges message `M` with the acknowledgement token returned by the current read
 - **THEN** message `M` MUST NOT be returned by future reads
 
+#### Scenario: Stale acknowledgement is rejected
+- **WHEN** a client reads message `M`, lets the visibility timeout expire, and then attempts to acknowledge using the old token
+- **THEN** the acknowledgement MUST fail without removing the message
+
 #### Scenario: Archive preserves a processed message
-- **WHEN** a client archives message `M`
+- **WHEN** a client archives message `M` with the acknowledgement token returned by the current read
 - **THEN** message `M` MUST be removed from the active queue and retained in the queue archive
 
 #### Scenario: Extend visibility timeout
-- **WHEN** a client extends the visibility timeout for message `M`
+- **WHEN** a client extends the visibility timeout for message `M` with the acknowledgement token returned by the current read
 - **THEN** message `M` MUST remain invisible until the new timeout expires
 
 ### Requirement: Long polling and metrics

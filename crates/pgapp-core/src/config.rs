@@ -5,6 +5,7 @@ use std::{collections::HashMap, net::SocketAddr, time::Duration};
 pub struct ServiceToggles {
     pub cache: bool,
     pub mq: bool,
+    pub config: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,6 +13,7 @@ pub struct RequestLimits {
     pub max_batch_size: i32,
     pub max_payload_bytes: usize,
     pub max_visibility_timeout_seconds: i64,
+    pub max_config_watch_seconds: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +83,7 @@ impl ServerConfig {
             services: ServiceToggles {
                 cache: parse_bool(&map, "PGAPP_ENABLE_CACHE", true)?,
                 mq: parse_bool(&map, "PGAPP_ENABLE_MQ", true)?,
+                config: parse_bool(&map, "PGAPP_ENABLE_CONFIG", true)?,
             },
             limits: RequestLimits {
                 max_batch_size: parse_i32(&map, "PGAPP_MAX_BATCH_SIZE", 100)?,
@@ -90,6 +93,7 @@ impl ServerConfig {
                     "PGAPP_MAX_VISIBILITY_TIMEOUT_SECONDS",
                     12 * 60 * 60,
                 )?,
+                max_config_watch_seconds: parse_i64(&map, "PGAPP_MAX_CONFIG_WATCH_SECONDS", 30)?,
             },
             cache_limits: CacheLimits {
                 max_keys: parse_optional_i64(&map, "PGAPP_CACHE_MAX_KEYS")?,
@@ -208,7 +212,9 @@ mod tests {
         assert_eq!(cfg.bind_addr.to_string(), "127.0.0.1:50051");
         assert!(cfg.services.cache);
         assert!(cfg.services.mq);
+        assert!(cfg.services.config);
         assert_eq!(cfg.max_connections, 20);
+        assert_eq!(cfg.limits.max_config_watch_seconds, 30);
         assert!(!cfg.admin.enabled);
         assert_eq!(cfg.admin.bind_addr.to_string(), "127.0.0.1:8080");
         assert_eq!(cfg.admin.token, None);
@@ -237,6 +243,10 @@ mod tests {
             "PGAPP_MAX_VISIBILITY_TIMEOUT_SECONDS".to_string(),
             "120".to_string(),
         );
+        env.insert(
+            "PGAPP_MAX_CONFIG_WATCH_SECONDS".to_string(),
+            "45".to_string(),
+        );
         env.insert("PGAPP_CACHE_MAX_KEYS".to_string(), "1000".to_string());
         env.insert("PGAPP_CACHE_MAX_BYTES".to_string(), "4096".to_string());
 
@@ -245,6 +255,7 @@ mod tests {
         assert_eq!(cfg.limits.max_batch_size, 9);
         assert_eq!(cfg.limits.max_payload_bytes, 512);
         assert_eq!(cfg.limits.max_visibility_timeout_seconds, 120);
+        assert_eq!(cfg.limits.max_config_watch_seconds, 45);
         assert_eq!(cfg.cache_limits.max_keys, Some(1000));
         assert_eq!(cfg.cache_limits.max_bytes, Some(4096));
     }

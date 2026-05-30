@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package pgapp.v1;
+
+option go_package = "github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1";
+
+import "pgapp/v1/common.proto";
+
+service ConfigService {
+  rpc ListScopes(ListConfigScopesRequest) returns (ListConfigScopesResponse);
+  rpc UpsertItem(UpsertConfigItemRequest) returns (OperationResult);
+  rpc DeleteItem(DeleteConfigItemRequest) returns (OperationResult);
+  rpc GetDraft(GetConfigDraftRequest) returns (ConfigDraftResponse);
+  rpc Publish(PublishConfigRequest) returns (ConfigRelease);
+  rpc GetRelease(GetConfigReleaseRequest) returns (ConfigRelease);
+  rpc ListReleases(ListConfigReleasesRequest) returns (ListConfigReleasesResponse);
+  rpc Watch(WatchConfigRequest) returns (WatchConfigResponse);
+}
+
+message ConfigScope {
+  string app_id = 1;
+  string environment = 2;
+  string cluster = 3;
+  string namespace = 4;
+}
+
+message ConfigItem {
+  string key = 1;
+  string json_value = 2;
+  bool deleted = 3;
+  string updated_at = 4;
+}
+
+message ConfigRelease {
+  ConfigScope scope = 1;
+  int64 revision = 2;
+  string checksum = 3;
+  string snapshot_json = 4;
+  string message = 5;
+  string published_by = 6;
+  string published_at = 7;
+}
+
+message ListConfigScopesRequest {
+  int32 limit = 1;
+  int64 offset = 2;
+}
+
+message ConfigScopeSummary {
+  ConfigScope scope = 1;
+  int64 current_revision = 2;
+  string created_at = 3;
+  string updated_at = 4;
+}
+
+message ListConfigScopesResponse {
+  repeated ConfigScopeSummary scopes = 1;
+  int64 next_offset = 2;
+}
+
+message UpsertConfigItemRequest {
+  ConfigScope scope = 1;
+  string key = 2;
+  string json_value = 3;
+}
+
+message DeleteConfigItemRequest {
+  ConfigScope scope = 1;
+  string key = 2;
+}
+
+message GetConfigDraftRequest {
+  ConfigScope scope = 1;
+}
+
+message ConfigDraftResponse {
+  ConfigScope scope = 1;
+  repeated ConfigItem items = 2;
+}
+
+message PublishConfigRequest {
+  ConfigScope scope = 1;
+  string message = 2;
+  string published_by = 3;
+}
+
+message GetConfigReleaseRequest {
+  ConfigScope scope = 1;
+  int64 revision = 2;
+}
+
+message ListConfigReleasesRequest {
+  ConfigScope scope = 1;
+  int32 limit = 2;
+  int64 offset = 3;
+}
+
+message ListConfigReleasesResponse {
+  repeated ConfigRelease releases = 1;
+  int64 next_offset = 2;
+}
+
+message WatchConfigRequest {
+  ConfigScope scope = 1;
+  int64 known_revision = 2;
+  int64 timeout_seconds = 3;
+}
+
+message WatchConfigResponse {
+  bool changed = 1;
+  int64 latest_revision = 2;
+  ConfigRelease release = 3;
+}

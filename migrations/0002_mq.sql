@@ -15,11 +15,15 @@ CREATE TABLE IF NOT EXISTS mq_messages (
   headers JSONB NOT NULL DEFAULT '{}'::jsonb,
   available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   visibility_timeout_at TIMESTAMPTZ,
+  ack_token TEXT,
   read_count INTEGER NOT NULL DEFAULT 0,
   last_read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE mq_messages
+  ADD COLUMN IF NOT EXISTS ack_token TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_mq_messages_visible
   ON mq_messages(queue_id, available_at, visibility_timeout_at, id);
@@ -27,6 +31,10 @@ CREATE INDEX IF NOT EXISTS idx_mq_messages_visible
 CREATE INDEX IF NOT EXISTS idx_mq_messages_inflight
   ON mq_messages(queue_id, visibility_timeout_at)
   WHERE visibility_timeout_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_mq_messages_ack
+  ON mq_messages(queue_id, id, ack_token)
+  WHERE ack_token IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS mq_archives (
   id BIGSERIAL PRIMARY KEY,

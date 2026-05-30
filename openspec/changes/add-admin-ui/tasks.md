@@ -29,7 +29,7 @@
 
 - [x] 4.1 Write failing tests for listing queues, queue metrics, and paginated message previews without mutating visibility timeout.
 - [x] 4.2 Add MQ Admin read endpoints for queues, backlog previews, archive previews, and queue metrics.
-- [x] 4.3 Write failing tests proving MQ Admin routes do not expose send/delete/archive/purge/drop/ack behavior.
+- [x] 4.3 Write failing tests proving MQ Admin routes do not expose send/ack/archive/visibility-change/purge/drop behavior.
 - [x] 4.4 Write failing tests proving Admin message browsing does not update `visibility_timeout_at`, `read_count`, `last_read_at`, archive rows, or active message availability.
 - [x] 4.5 Verify Admin message browsing uses a peek/list path instead of delivery-oriented `Read`.
 

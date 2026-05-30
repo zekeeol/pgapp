@@ -2,7 +2,7 @@
 
 The Admin UI is a React + Vite operations console backed by a token-protected
 HTTP API inside the `pgapp-server` binary. It is intentionally read-only for
-Cache and MQ data.
+Cache and MQ data, and it owns Config Center draft/publish workflows.
 
 ## Runtime Model
 
@@ -45,10 +45,25 @@ GET /api/admin/cache/namespaces
 GET /api/admin/cache/entries
 GET /api/admin/mq/queues
 GET /api/admin/mq/queues/{queue}/messages
+GET /api/admin/config/scopes
+GET /api/admin/config/draft
+GET /api/admin/config/releases
 ```
 
 List routes support bounded pagination through `limit` and `offset`. The server
 caps requested limits at `PGAPP_ADMIN_MAX_PAGE_SIZE`.
+
+Config mutation routes:
+
+```text
+PUT /api/admin/config/items
+DELETE /api/admin/config/items
+POST /api/admin/config/releases
+```
+
+Config item writes accept a scope, key, and JSON value. The write updates draft
+state only. `POST /api/admin/config/releases` publishes the current draft as a
+client-visible immutable release snapshot.
 
 ## Read-Only Limits
 
@@ -61,9 +76,9 @@ The Admin API does not expose Cache mutation routes:
 The Admin API does not expose MQ mutation routes:
 
 - no send
-- no delete or archive
+- no ack or archive
 - no purge or drop
-- no ack or visibility timeout changes
+- no visibility timeout changes
 
 Cache inspection reads from `cache_namespaces`, `cache_entries`, and
 `cache_stats` without calling Cache `get`, so it does not increment hit/miss
@@ -72,6 +87,20 @@ counters or update access metadata.
 MQ message browsing reads from `mq_messages` and `mq_archives` without calling
 MQ `Read`, so it does not change `visibility_timeout_at`, `read_count`, or
 delivery availability.
+
+## Config Center
+
+Config scopes use:
+
+```text
+app_id / environment / cluster / namespace
+```
+
+The UI shows scope rows, draft items, a JSON editor, a publish action, and
+release history. Invalid JSON is rejected before submission where possible, and
+server-side validation returns stable `invalid_argument` errors. Config Center
+does not add secret-specific display behavior in this version; sensitive values
+should be stored in a dedicated secret manager.
 
 ## Logs
 

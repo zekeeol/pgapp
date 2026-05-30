@@ -19,6 +19,7 @@ type Client struct {
 	conn     *grpc.ClientConn
 	cache    pb.CacheServiceClient
 	mq       pb.MQServiceClient
+	config   pb.ConfigServiceClient
 }
 
 func NewClient(endpoint string, timeout time.Duration) *Client {
@@ -36,6 +37,7 @@ func Dial(ctx context.Context, endpoint string, timeout time.Duration) (*Client,
 		conn:     conn,
 		cache:    pb.NewCacheServiceClient(conn),
 		mq:       pb.NewMQServiceClient(conn),
+		config:   pb.NewConfigServiceClient(conn),
 	}
 	if timeout > 0 {
 		pingCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -59,6 +61,39 @@ type CacheClient struct {
 
 func (c *Client) Cache() *CacheClient {
 	return &CacheClient{client: c}
+}
+
+type ConfigClient struct {
+	client *Client
+}
+
+type ConfigRelease struct {
+	Scope       *pb.ConfigScope
+	Revision    int64
+	Checksum    string
+	Snapshot    map[string]interface{}
+	Message     string
+	PublishedBy string
+	PublishedAt string
+}
+
+type ConfigWatchResult struct {
+	Changed        bool
+	LatestRevision int64
+	Release        *ConfigRelease
+}
+
+func (c *Client) Config() *ConfigClient {
+	return &ConfigClient{client: c}
+}
+
+func NewConfigScope(appID string, environment string, cluster string, namespace string) *pb.ConfigScope {
+	return &pb.ConfigScope{
+		AppId:       appID,
+		Environment: environment,
+		Cluster:     cluster,
+		Namespace:   namespace,
+	}
 }
 
 func (c *Client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -291,15 +326,16 @@ func (m *MQClient) ReadWithPoll(ctx context.Context, queueName string, quantity 
 	return resp.Messages, nil
 }
 
-func (m *MQClient) Delete(ctx context.Context, queueName string, messageID int64) (bool, error) {
+func (m *MQClient) Ack(ctx context.Context, queueName string, messageID int64, ackToken string) (bool, error) {
 	if m.client.mq == nil {
 		return false, ErrNotConnected
 	}
 	ctx, cancel := m.client.withTimeout(ctx)
 	defer cancel()
-	resp, err := m.client.mq.Delete(ctx, &pb.DeleteMessageRequest{
+	resp, err := m.client.mq.Ack(ctx, &pb.AckMessageRequest{
 		QueueName: queueName,
 		MessageId: messageID,
+		AckToken:  ackToken,
 	})
 	if err != nil {
 		return false, err
@@ -307,7 +343,7 @@ func (m *MQClient) Delete(ctx context.Context, queueName string, messageID int64
 	return resp.Success, nil
 }
 
-func (m *MQClient) Archive(ctx context.Context, queueName string, messageID int64) (bool, error) {
+func (m *MQClient) Archive(ctx context.Context, queueName string, messageID int64, ackToken string) (bool, error) {
 	if m.client.mq == nil {
 		return false, ErrNotConnected
 	}
@@ -316,6 +352,7 @@ func (m *MQClient) Archive(ctx context.Context, queueName string, messageID int6
 	resp, err := m.client.mq.Archive(ctx, &pb.ArchiveMessageRequest{
 		QueueName: queueName,
 		MessageId: messageID,
+		AckToken:  ackToken,
 	})
 	if err != nil {
 		return false, err
@@ -323,7 +360,7 @@ func (m *MQClient) Archive(ctx context.Context, queueName string, messageID int6
 	return resp.Success, nil
 }
 
-func (m *MQClient) SetVisibilityTimeout(ctx context.Context, queueName string, messageID int64, visibilityTimeoutSeconds int64) (bool, error) {
+func (m *MQClient) SetVisibilityTimeout(ctx context.Context, queueName string, messageID int64, ackToken string, visibilityTimeoutSeconds int64) (bool, error) {
 	if m.client.mq == nil {
 		return false, ErrNotConnected
 	}
@@ -333,6 +370,7 @@ func (m *MQClient) SetVisibilityTimeout(ctx context.Context, queueName string, m
 		QueueName:                queueName,
 		MessageId:                messageID,
 		VisibilityTimeoutSeconds: visibilityTimeoutSeconds,
+		AckToken:                 ackToken,
 	})
 	if err != nil {
 		return false, err
@@ -373,4 +411,70 @@ func (m *MQClient) DropQueue(ctx context.Context, queueName string) (bool, error
 		return false, err
 	}
 	return resp.Success, nil
+}
+
+func (c *ConfigClient) GetLatestRelease(ctx context.Context, scope *pb.ConfigScope) (*ConfigRelease, error) {
+	return c.GetRelease(ctx, scope, 0)
+}
+
+func (c *ConfigClient) GetRelease(ctx context.Context, scope *pb.ConfigScope, revision int64) (*ConfigRelease, error) {
+	if c.client.config == nil {
+		return nil, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.config.GetRelease(ctx, &pb.GetConfigReleaseRequest{
+		Scope:    scope,
+		Revision: revision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return decodeConfigRelease(resp)
+}
+
+func (c *ConfigClient) Watch(ctx context.Context, scope *pb.ConfigScope, knownRevision int64, timeoutSeconds int64) (*ConfigWatchResult, error) {
+	if c.client.config == nil {
+		return nil, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.config.Watch(ctx, &pb.WatchConfigRequest{
+		Scope:          scope,
+		KnownRevision:  knownRevision,
+		TimeoutSeconds: timeoutSeconds,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := &ConfigWatchResult{
+		Changed:        resp.Changed,
+		LatestRevision: resp.LatestRevision,
+	}
+	if resp.Release != nil {
+		release, err := decodeConfigRelease(resp.Release)
+		if err != nil {
+			return nil, err
+		}
+		result.Release = release
+	}
+	return result, nil
+}
+
+func decodeConfigRelease(resp *pb.ConfigRelease) (*ConfigRelease, error) {
+	snapshot := map[string]interface{}{}
+	if resp.SnapshotJson != "" {
+		if err := json.Unmarshal([]byte(resp.SnapshotJson), &snapshot); err != nil {
+			return nil, err
+		}
+	}
+	return &ConfigRelease{
+		Scope:       resp.Scope,
+		Revision:    resp.Revision,
+		Checksum:    resp.Checksum,
+		Snapshot:    snapshot,
+		Message:     resp.Message,
+		PublishedBy: resp.PublishedBy,
+		PublishedAt: resp.PublishedAt,
+	}, nil
 }

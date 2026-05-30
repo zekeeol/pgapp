@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "现代后台看板 UI 原型",
+  "entry": "admin-ui-modern-red-dashboard.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-05-30T07:44:16.172Z",
+  "updatedAt": "2026-05-30T07:44:16.179Z",
+  "sourceSkillId": "agent-browser",
+  "designSystemId": "xiaohongshu",
+  "metadata": {
+    "identifier": "admin-ui-modern-red-dashboard",
+    "artifactType": "text/html",
+    "inferred": false
+  }
+}

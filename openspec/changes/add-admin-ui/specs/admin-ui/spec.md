@@ -102,7 +102,7 @@ The Admin UI MUST allow authenticated admins to inspect Cache data through read-
 
 ### Requirement: Read-only MQ inspection
 
-The Admin UI MUST allow authenticated admins to inspect MQ queues and messages through read-only Admin API routes. MQ views MUST support queue listing, queue metrics, and message preview without accidental delivery mutation. The Admin API MUST NOT expose MQ send, delete, archive, purge, drop, or ack routes in this change.
+The Admin UI MUST allow authenticated admins to inspect MQ queues and messages through read-only Admin API routes. MQ views MUST support queue listing, queue metrics, and message preview without accidental delivery mutation. The Admin API MUST NOT expose MQ send, ack, archive, visibility-timeout, purge, or drop routes in this change.
 
 #### Scenario: Browse queues
 - **WHEN** an authenticated admin opens the MQ view
@@ -117,7 +117,7 @@ The Admin UI MUST allow authenticated admins to inspect MQ queues and messages t
 - **THEN** the Admin API MUST return read-only archived message previews without moving messages between archive and active storage
 
 #### Scenario: MQ mutation is unavailable
-- **WHEN** an Admin API client attempts to send, delete, archive, purge, drop, or acknowledge MQ data through the Admin API
+- **WHEN** an Admin API client attempts to send, acknowledge, archive, change visibility, purge, or drop MQ data through the Admin API
 - **THEN** the request MUST fail with a method-not-allowed or not-found response
 
 ### Requirement: Safety feedback

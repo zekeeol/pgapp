@@ -29,14 +29,14 @@ The Rust, Go, and Python SDKs MUST expose Cache methods corresponding to server-
 - **THEN** the SDK MUST expose the miss using an idiomatic nullable, option, or result representation for that language
 
 ### Requirement: MQ API parity
-The Rust, Go, and Python SDKs MUST expose MQ methods corresponding to server-supported queue lifecycle, send, batch send, read, long poll, delete, archive, visibility timeout, and metrics operations.
+The Rust, Go, and Python SDKs MUST expose MQ methods corresponding to server-supported queue lifecycle, send, batch send, read, long poll, acknowledgement, archive, visibility timeout, and metrics operations.
 
 #### Scenario: SDK sends and reads a message
 - **WHEN** an SDK user sends a JSON-compatible message and then reads from the same queue
-- **THEN** the SDK MUST return the message id, read count, timestamps, and payload reported by the server
+- **THEN** the SDK MUST return the message id, read count, timestamps, acknowledgement token, and payload reported by the server
 
 #### Scenario: SDK acknowledges a message
-- **WHEN** an SDK user deletes a read message
+- **WHEN** an SDK user acknowledges a read message with its acknowledgement token
 - **THEN** the SDK MUST report the acknowledgement result returned by the server
 
 ### Requirement: Consistent serialization and errors

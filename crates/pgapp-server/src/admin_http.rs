@@ -3,18 +3,20 @@ use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, put},
 };
 use chrono::{DateTime, Utc};
 use pgapp_core::{
     PgAppError,
     admin::{AdminLogInput, AdminStore, ListQuery, LogFilter},
     cache::CacheStore,
+    config_center::ConfigScope,
+    config_center::ConfigStore,
     db,
     metrics::MetricsRegistry,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use sqlx::Row;
 use std::net::SocketAddr;
 use uuid::Uuid;
@@ -23,10 +25,12 @@ use uuid::Uuid;
 pub(crate) struct AdminHttpState {
     pub(crate) pool: sqlx::PgPool,
     pub(crate) cache_store: CacheStore,
+    pub(crate) config_store: ConfigStore,
     pub(crate) admin_store: AdminStore,
     pub(crate) metrics: MetricsRegistry,
     pub(crate) cache_enabled: bool,
     pub(crate) mq_enabled: bool,
+    pub(crate) config_enabled: bool,
     pub(crate) token: String,
 }
 
@@ -35,6 +39,10 @@ struct ListParams {
     limit: Option<i64>,
     offset: Option<i64>,
     namespace: Option<String>,
+    app_id: Option<String>,
+    environment: Option<String>,
+    cluster: Option<String>,
+    key: Option<String>,
     level: Option<String>,
     text: Option<String>,
     target: Option<String>,
@@ -119,6 +127,20 @@ struct AdminSessionDto {
     last_seen_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ConfigItemBody {
+    scope: ConfigScope,
+    key: String,
+    value: Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublishConfigBody {
+    scope: ConfigScope,
+    message: Option<String>,
+    published_by: Option<String>,
+}
+
 pub(crate) fn router(state: AdminHttpState) -> Router {
     Router::new()
         .route("/api/admin/overview", get(overview))
@@ -127,6 +149,16 @@ pub(crate) fn router(state: AdminHttpState) -> Router {
         .route("/api/admin/cache/entries", get(cache_entries))
         .route("/api/admin/mq/queues", get(mq_queues))
         .route("/api/admin/mq/queues/{queue}/messages", get(mq_messages))
+        .route("/api/admin/config/scopes", get(config_scopes))
+        .route("/api/admin/config/draft", get(config_draft))
+        .route(
+            "/api/admin/config/items",
+            put(config_upsert_item).delete(config_delete_item),
+        )
+        .route(
+            "/api/admin/config/releases",
+            get(config_releases).post(config_publish),
+        )
         .route("/api/admin/clients", get(clients))
         .with_state(state)
 }
@@ -314,6 +346,149 @@ async fn clients(State(state): State<AdminHttpState>, headers: HeaderMap) -> Res
     response
 }
 
+async fn config_scopes(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Query(params): Query<ListParams>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = state
+        .config_store
+        .list_scopes(params.limit, params.offset.unwrap_or(0))
+        .await;
+    let response = match result {
+        Ok(page) => json_response(StatusCode::OK, &request_id, page),
+        Err(err) => admin_store_error("config scopes unavailable", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/scopes").await;
+    response
+}
+
+async fn config_draft(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Query(params): Query<ListParams>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = match config_scope_from_query(&params) {
+        Ok(scope) => match state.config_store.get_draft(&scope).await {
+            Ok(items) => Ok(json!({"scope": scope, "items": items})),
+            Err(err) => Err(err),
+        },
+        Err(err) => Err(err),
+    };
+    let response = match result {
+        Ok(body) => json_response(StatusCode::OK, &request_id, body),
+        Err(err) => admin_store_error("config draft unavailable", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/draft").await;
+    response
+}
+
+async fn config_upsert_item(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ConfigItemBody>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = state
+        .config_store
+        .upsert_item(&body.scope, &body.key, body.value)
+        .await;
+    let response = match result {
+        Ok(()) => json_response(StatusCode::OK, &request_id, json!({"success": true})),
+        Err(err) => admin_store_error("config item update rejected", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/items").await;
+    response
+}
+
+async fn config_delete_item(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Query(params): Query<ListParams>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = match config_scope_from_query(&params) {
+        Ok(scope) => match params.key.as_deref() {
+            Some(key) => state.config_store.delete_item(&scope, key).await,
+            None => Err(PgAppError::InvalidArgument(
+                "key query parameter is required".to_string(),
+            )),
+        },
+        Err(err) => Err(err),
+    };
+    let response = match result {
+        Ok(success) => json_response(StatusCode::OK, &request_id, json!({"success": success})),
+        Err(err) => admin_store_error("config item delete rejected", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/items").await;
+    response
+}
+
+async fn config_publish(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Json(body): Json<PublishConfigBody>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = state
+        .config_store
+        .publish(
+            &body.scope,
+            body.message.as_deref().unwrap_or_default(),
+            body.published_by.as_deref().unwrap_or("admin"),
+        )
+        .await;
+    let response = match result {
+        Ok(release) => json_response(StatusCode::OK, &request_id, release),
+        Err(err) => admin_store_error("config publish rejected", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/releases").await;
+    response
+}
+
+async fn config_releases(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Query(params): Query<ListParams>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = match config_scope_from_query(&params) {
+        Ok(scope) => {
+            state
+                .config_store
+                .list_releases(&scope, params.limit, params.offset.unwrap_or(0))
+                .await
+        }
+        Err(err) => Err(err),
+    };
+    let response = match result {
+        Ok(page) => json_response(StatusCode::OK, &request_id, page),
+        Err(err) => admin_store_error("config releases unavailable", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/releases").await;
+    response
+}
+
 async fn overview_body(
     state: &AdminHttpState,
 ) -> Result<OverviewResponse, Box<dyn std::error::Error>> {
@@ -335,7 +510,20 @@ async fn overview_body(
             message: "disabled".to_string(),
         }
     };
-    let capabilities = vec![to_capability(cache_status), to_capability(mq_status)];
+    let config_status = if state.config_enabled {
+        db::check_config_schema(&state.pool).await
+    } else {
+        db::CapabilityStatus {
+            name: "config",
+            available: false,
+            message: "disabled".to_string(),
+        }
+    };
+    let capabilities = vec![
+        to_capability(cache_status),
+        to_capability(mq_status),
+        to_capability(config_status),
+    ];
     let ready = capabilities
         .iter()
         .filter(|capability| capability.state != "disabled")
@@ -456,6 +644,27 @@ fn to_capability(status: db::CapabilityStatus) -> CapabilityDto {
     }
 }
 
+fn config_scope_from_query(params: &ListParams) -> Result<ConfigScope, PgAppError> {
+    Ok(ConfigScope {
+        app_id: params
+            .app_id
+            .clone()
+            .ok_or_else(|| PgAppError::InvalidArgument("app_id is required".to_string()))?,
+        environment: params
+            .environment
+            .clone()
+            .ok_or_else(|| PgAppError::InvalidArgument("environment is required".to_string()))?,
+        cluster: params
+            .cluster
+            .clone()
+            .ok_or_else(|| PgAppError::InvalidArgument("cluster is required".to_string()))?,
+        namespace: params
+            .namespace
+            .clone()
+            .ok_or_else(|| PgAppError::InvalidArgument("namespace is required".to_string()))?,
+    })
+}
+
 async fn authorize(
     state: &AdminHttpState,
     headers: &HeaderMap,
@@ -546,7 +755,7 @@ fn admin_error(message: &str, request_id: &str, err: impl std::fmt::Display) -> 
 fn admin_store_error(message: &str, request_id: &str, err: PgAppError) -> Response {
     let detail = err.to_string();
     let (status, code) = match &err {
-        PgAppError::InvalidArgument(_) => (StatusCode::BAD_REQUEST, "invalid_request"),
+        PgAppError::InvalidArgument(_) => (StatusCode::BAD_REQUEST, "invalid_argument"),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
     };
     error_response(status, code, message, request_id, Some(detail))

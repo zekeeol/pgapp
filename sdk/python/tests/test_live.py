@@ -2,7 +2,9 @@ import os
 import time
 import unittest
 
+import grpc
 from pgapp_sdk import PGAppClient, PGAppError
+from pgapp.v1 import config_pb2, config_pb2_grpc
 
 
 class LivePythonSDKTests(unittest.TestCase):
@@ -25,7 +27,8 @@ class LivePythonSDKTests(unittest.TestCase):
         messages = self.client.mq.read(queue, quantity=1, visibility_timeout_seconds=30)
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].message_id, message_id)
-        self.assertTrue(self.client.mq.delete(queue, message_id))
+        self.assertNotEqual(messages[0].ack_token, "")
+        self.assertTrue(self.client.mq.ack(queue, message_id, messages[0].ack_token))
 
     def test_phase_one_sdk_surface(self) -> None:
         suffix = time.time_ns()
@@ -54,12 +57,60 @@ class LivePythonSDKTests(unittest.TestCase):
         )
         self.assertEqual(len(messages), 1)
         self.assertTrue(
-            self.client.mq.set_visibility_timeout(queue, messages[0].message_id, 0)
+            self.client.mq.set_visibility_timeout(
+                queue,
+                messages[0].message_id,
+                messages[0].ack_token,
+                30,
+            )
         )
-        self.assertTrue(self.client.mq.archive(queue, messages[0].message_id))
+        self.assertTrue(
+            self.client.mq.archive(queue, messages[0].message_id, messages[0].ack_token)
+        )
         self.assertEqual(self.client.mq.metrics(queue).archived_message_count, 1)
         self.assertTrue(self.client.mq.purge_queue(queue))
         self.assertTrue(self.client.mq.drop_queue(queue))
+
+    def test_config_read_and_watch(self) -> None:
+        suffix = time.time_ns()
+        scope = self.client.config.scope(
+            f"py_sdk_config_{suffix}",
+            "prod",
+            "default",
+            "application",
+        )
+        channel = grpc.insecure_channel(os.environ["PGAPP_TEST_ENDPOINT"])
+        generated = config_pb2_grpc.ConfigServiceStub(channel)
+        proto_scope = config_pb2.ConfigScope(
+            app_id=scope.app_id,
+            environment=scope.environment,
+            cluster=scope.cluster,
+            namespace=scope.namespace,
+        )
+        generated.UpsertItem(
+            config_pb2.UpsertConfigItemRequest(
+                scope=proto_scope,
+                key="feature_flags",
+                json_value='{"enabled":true}',
+            ),
+            timeout=5,
+        )
+        generated.Publish(
+            config_pb2.PublishConfigRequest(
+                scope=proto_scope,
+                message="sdk release",
+                published_by="python-sdk-test",
+            ),
+            timeout=5,
+        )
+
+        release = self.client.config.get_latest_release(scope)
+        self.assertEqual(release.revision, 1)
+        self.assertEqual(release.snapshot["feature_flags"], {"enabled": True})
+        watch = self.client.config.watch(scope, known_revision=release.revision, timeout_seconds=0)
+        self.assertFalse(watch.changed)
+        self.assertEqual(watch.latest_revision, release.revision)
+        self.assertIsNone(watch.release)
 
     def test_error_status_is_preserved(self) -> None:
         with self.assertRaises(PGAppError) as raised:

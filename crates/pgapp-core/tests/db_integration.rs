@@ -1,6 +1,7 @@
 use pgapp_core::{
     admin::{AdminLogInput, AdminStore, ListQuery, LogFilter},
     cache::{CacheLimits, CacheStore},
+    config_center::{ConfigLimits, ConfigScope, ConfigStore},
     db,
     mq::{MqStore, QueueStorageMode},
 };
@@ -18,7 +19,25 @@ async fn pool() -> Option<PgPool> {
 
 fn unique(prefix: &str) -> String {
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-    format!("{prefix}_{id}")
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!("{prefix}_{id}_{nanos}")
+}
+
+fn config_scope(app_id: &str, environment: &str, cluster: &str, namespace: &str) -> ConfigScope {
+    let suffix = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    ConfigScope {
+        app_id: format!("{app_id}_{suffix}_{nanos}"),
+        environment: environment.to_string(),
+        cluster: cluster.to_string(),
+        namespace: namespace.to_string(),
+    }
 }
 
 #[tokio::test]
@@ -30,6 +49,7 @@ async fn migrations_create_required_cache_and_mq_schema() {
 
     let cache = db::check_cache_schema(&pool).await;
     let mq = db::check_mq_schema(&pool).await;
+    let config = db::check_config_schema(&pool).await;
 
     assert!(
         cache.available,
@@ -37,6 +57,11 @@ async fn migrations_create_required_cache_and_mq_schema() {
         cache.message
     );
     assert!(mq.available, "mq schema unavailable: {}", mq.message);
+    assert!(
+        config.available,
+        "config schema unavailable: {}",
+        config.message
+    );
 
     let cache_indexes: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::bigint FROM pg_indexes WHERE tablename = 'cache_entries'",
@@ -45,6 +70,253 @@ async fn migrations_create_required_cache_and_mq_schema() {
     .await
     .unwrap();
     assert!(cache_indexes >= 3);
+}
+
+#[tokio::test]
+async fn config_draft_items_are_scoped_json_documents() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let store = ConfigStore::new(pool, ConfigLimits::default());
+    let scope = config_scope("billing", "prod", "default", "application");
+    let other_scope = config_scope("billing", "staging", "default", "application");
+
+    store
+        .upsert_item(
+            &scope,
+            "feature_flags",
+            serde_json::json!({"enabled": true}),
+        )
+        .await
+        .unwrap();
+    store
+        .upsert_item(
+            &other_scope,
+            "feature_flags",
+            serde_json::json!({"enabled": false}),
+        )
+        .await
+        .unwrap();
+
+    let draft = store.get_draft(&scope).await.unwrap();
+    assert_eq!(draft.len(), 1);
+    assert_eq!(draft[0].key, "feature_flags");
+    assert_eq!(draft[0].value, serde_json::json!({"enabled": true}));
+    assert!(!draft[0].deleted);
+
+    let other = store.get_draft(&other_scope).await.unwrap();
+    assert_eq!(other[0].value, serde_json::json!({"enabled": false}));
+}
+
+#[tokio::test]
+async fn config_draft_delete_tombstones_before_publish() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let store = ConfigStore::new(pool, ConfigLimits::default());
+    let scope = config_scope("deleteapp", "prod", "default", "application");
+
+    store
+        .upsert_item(
+            &scope,
+            "feature_flags",
+            serde_json::json!({"enabled": true}),
+        )
+        .await
+        .unwrap();
+    assert!(store.delete_item(&scope, "feature_flags").await.unwrap());
+
+    let draft = store.get_draft(&scope).await.unwrap();
+    assert_eq!(draft.len(), 1);
+    assert!(draft[0].deleted);
+}
+
+#[tokio::test]
+async fn config_validation_rejects_invalid_scope_key_and_watch_timeout() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let store = ConfigStore::new(
+        pool,
+        ConfigLimits {
+            max_watch_seconds: 2,
+            max_payload_bytes: 128,
+            max_page_size: 50,
+        },
+    );
+    let good = config_scope("validapp", "prod", "default", "application");
+    let bad = config_scope("1bad", "prod", "default", "application");
+
+    assert!(
+        store
+            .upsert_item(&bad, "feature_flags", serde_json::json!({"enabled": true}))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .upsert_item(&good, "feature flags", serde_json::json!({"enabled": true}))
+            .await
+            .is_err()
+    );
+    assert!(store.watch(&good, 0, 3, 25).await.is_err());
+}
+
+#[tokio::test]
+async fn config_publish_creates_immutable_revisions_and_hides_drafts_until_publish() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let store = ConfigStore::new(pool, ConfigLimits::default());
+    let scope = config_scope("releaseapp", "prod", "default", "application");
+
+    store
+        .upsert_item(
+            &scope,
+            "feature_flags",
+            serde_json::json!({"enabled": true}),
+        )
+        .await
+        .unwrap();
+    store
+        .upsert_item(&scope, "limits", serde_json::json!({"qps": 10}))
+        .await
+        .unwrap();
+    let first = store
+        .publish(&scope, "initial release", "admin")
+        .await
+        .unwrap();
+    assert_eq!(first.revision, 1);
+    assert_eq!(
+        first.snapshot,
+        serde_json::json!({"feature_flags": {"enabled": true}, "limits": {"qps": 10}})
+    );
+
+    store
+        .upsert_item(
+            &scope,
+            "feature_flags",
+            serde_json::json!({"enabled": false}),
+        )
+        .await
+        .unwrap();
+    store.delete_item(&scope, "limits").await.unwrap();
+
+    let latest_before_publish = store.get_latest_release(&scope).await.unwrap();
+    assert_eq!(latest_before_publish.revision, 1);
+    assert_eq!(
+        latest_before_publish.snapshot["feature_flags"]["enabled"],
+        true
+    );
+    assert_eq!(
+        store.get_release(&scope, 1).await.unwrap().snapshot,
+        first.snapshot
+    );
+
+    let second = store.publish(&scope, "second", "admin").await.unwrap();
+    assert_eq!(second.revision, 2);
+    assert_eq!(
+        second.snapshot,
+        serde_json::json!({"feature_flags": {"enabled": false}})
+    );
+    assert_eq!(
+        store.get_release(&scope, 1).await.unwrap().snapshot,
+        first.snapshot
+    );
+
+    let history = store.list_releases(&scope, 10, 0).await.unwrap();
+    assert_eq!(
+        history
+            .items
+            .iter()
+            .map(|release| release.revision)
+            .collect::<Vec<_>>(),
+        vec![2, 1]
+    );
+}
+
+#[tokio::test]
+async fn config_publish_creates_revision_even_when_checksum_is_unchanged() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let store = ConfigStore::new(pool, ConfigLimits::default());
+    let scope = config_scope("samechecksum", "prod", "default", "application");
+
+    store
+        .upsert_item(
+            &scope,
+            "feature_flags",
+            serde_json::json!({"enabled": true}),
+        )
+        .await
+        .unwrap();
+    let first = store.publish(&scope, "one", "admin").await.unwrap();
+    let second = store.publish(&scope, "two", "admin").await.unwrap();
+
+    assert_eq!(second.revision, first.revision + 1);
+    assert_eq!(second.checksum, first.checksum);
+}
+
+#[tokio::test]
+async fn config_watch_returns_newer_release_or_no_change() {
+    let Some(pool) = pool().await else {
+        eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let store = ConfigStore::new(
+        pool,
+        ConfigLimits {
+            max_watch_seconds: 2,
+            max_payload_bytes: 1024 * 1024,
+            max_page_size: 100,
+        },
+    );
+    let scope = config_scope("watchapp", "prod", "default", "application");
+    store
+        .upsert_item(
+            &scope,
+            "feature_flags",
+            serde_json::json!({"enabled": true}),
+        )
+        .await
+        .unwrap();
+    let first = store.publish(&scope, "one", "admin").await.unwrap();
+
+    let immediate = store.watch(&scope, 0, 1, 25).await.unwrap();
+    assert!(immediate.changed);
+    assert_eq!(immediate.release.unwrap().revision, first.revision);
+
+    let no_change = store.watch(&scope, first.revision, 0, 25).await.unwrap();
+    assert!(!no_change.changed);
+    assert_eq!(no_change.latest_revision, first.revision);
+
+    let publisher = store.clone();
+    let publish_scope = scope.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        publisher
+            .upsert_item(
+                &publish_scope,
+                "feature_flags",
+                serde_json::json!({"enabled": false}),
+            )
+            .await
+            .unwrap();
+        publisher
+            .publish(&publish_scope, "two", "admin")
+            .await
+            .unwrap();
+    });
+
+    let changed = store.watch(&scope, first.revision, 2, 25).await.unwrap();
+    assert!(changed.changed);
+    assert_eq!(changed.release.unwrap().revision, first.revision + 1);
 }
 
 #[tokio::test]
@@ -312,22 +584,30 @@ async fn mq_send_read_redeliver_archive_and_metrics() {
     let first = store.read(&queue, 1, 1).await.unwrap();
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].id, id);
+    assert!(!first[0].ack_token.is_empty());
 
     let hidden = store.read(&queue, 1, 1).await.unwrap();
     assert!(hidden.is_empty());
 
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    assert!(!store.ack(&queue, id, &first[0].ack_token).await.unwrap());
     let redelivered = store.read(&queue, 1, 30).await.unwrap();
     assert_eq!(redelivered[0].id, id);
     assert!(redelivered[0].read_count >= 2);
+    assert_ne!(redelivered[0].ack_token, first[0].ack_token);
 
-    assert!(store.archive(&queue, id).await.unwrap());
+    assert!(
+        store
+            .archive(&queue, id, &redelivered[0].ack_token)
+            .await
+            .unwrap()
+    );
     let metrics = store.metrics(&queue).await.unwrap();
     assert_eq!(metrics.archived_message_count, 1);
 }
 
 #[tokio::test]
-async fn mq_lifecycle_purge_drop_delayed_delete_and_visibility_extension() {
+async fn mq_lifecycle_purge_drop_delayed_ack_and_visibility_extension() {
     let Some(pool) = pool().await else {
         eprintln!("skipping integration test: DATABASE_URL is not set or unavailable");
         return;
@@ -354,12 +634,17 @@ async fn mq_lifecycle_purge_drop_delayed_delete_and_visibility_extension() {
 
     assert!(
         store
-            .set_visibility_timeout(&queue, delayed_id, 30)
+            .set_visibility_timeout(&queue, delayed_id, &delayed[0].ack_token, 30)
             .await
             .unwrap()
     );
     assert!(store.read(&queue, 1, 1).await.unwrap().is_empty());
-    assert!(store.delete(&queue, delayed_id).await.unwrap());
+    assert!(
+        store
+            .ack(&queue, delayed_id, &delayed[0].ack_token)
+            .await
+            .unwrap()
+    );
 
     store.send(&queue, r#"{"purge":true}"#, 0).await.unwrap();
     store.purge_queue(&queue).await.unwrap();

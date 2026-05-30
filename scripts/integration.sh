@@ -16,6 +16,7 @@ if [ -z "$PYTHON_BIN" ]; then
 fi
 
 CONTAINER_NAME="pgapp-integration-$$"
+ADMIN_UI_CONTAINER_NAME="${CONTAINER_NAME}-admin-ui"
 SERVER_LOG="${TMPDIR:-/tmp}/pgapp-server-${CONTAINER_NAME}.log"
 SERVER_PID=""
 
@@ -24,6 +25,7 @@ cleanup() {
     kill "$SERVER_PID" >/dev/null 2>&1 || true
     wait "$SERVER_PID" >/dev/null 2>&1 || true
   fi
+  docker rm -f "$ADMIN_UI_CONTAINER_NAME" >/dev/null 2>&1 || true
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
@@ -98,6 +100,41 @@ curl -fsS \
   -H "Authorization: Bearer ${PGAPP_ADMIN_TOKEN}" \
   "http://127.0.0.1:${ADMIN_PORT}/api/admin/overview" >/dev/null
 
+curl -fsS \
+  -X PUT \
+  -H "Authorization: Bearer ${PGAPP_ADMIN_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"scope":{"app_id":"integration_config","environment":"prod","cluster":"default","namespace":"application"},"key":"feature_flags","value":{"enabled":true}}' \
+  "http://127.0.0.1:${ADMIN_PORT}/api/admin/config/items" >/dev/null
+
+curl -fsS \
+  -X POST \
+  -H "Authorization: Bearer ${PGAPP_ADMIN_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"scope":{"app_id":"integration_config","environment":"prod","cluster":"default","namespace":"application"},"message":"integration release","published_by":"integration"}' \
+  "http://127.0.0.1:${ADMIN_PORT}/api/admin/config/releases" >/dev/null
+
+curl -fsS \
+  -H "Authorization: Bearer ${PGAPP_ADMIN_TOKEN}" \
+  "http://127.0.0.1:${ADMIN_PORT}/api/admin/config/releases?app_id=integration_config&environment=prod&cluster=default&namespace=application" >/dev/null
+
+docker build -t pgapp-admin-ui-integration apps/admin-ui >/dev/null
+docker run \
+  --name "$ADMIN_UI_CONTAINER_NAME" \
+  --add-host pgapp-server:127.0.0.1 \
+  -p 127.0.0.1::80 \
+  -d pgapp-admin-ui-integration >/dev/null
+
+ADMIN_UI_PORT=$(docker port "$ADMIN_UI_CONTAINER_NAME" 80/tcp | sed 's/.*://')
+for _ in $(seq 1 80); do
+  if curl -fsS "http://127.0.0.1:${ADMIN_UI_PORT}/" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.25
+done
+
+curl -fsS "http://127.0.0.1:${ADMIN_UI_PORT}/" | grep -q "pgapp Admin"
+
 scripts/check.sh
 
-echo "Integration test passed with Docker PostgreSQL on port ${PG_PORT}, gRPC on ${SERVER_PORT}, and Admin HTTP on ${ADMIN_PORT}."
+echo "Integration test passed with Docker PostgreSQL on port ${PG_PORT}, gRPC on ${SERVER_PORT}, Admin HTTP on ${ADMIN_PORT}, and Admin UI on ${ADMIN_UI_PORT}."
