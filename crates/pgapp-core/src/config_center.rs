@@ -57,6 +57,7 @@ pub struct ConfigLimits {
     pub max_watch_seconds: i64,
     pub max_payload_bytes: usize,
     pub max_page_size: usize,
+    pub max_schema_bytes: usize,
 }
 
 impl Default for ConfigLimits {
@@ -65,6 +66,7 @@ impl Default for ConfigLimits {
             max_watch_seconds: 30,
             max_payload_bytes: 1024 * 1024,
             max_page_size: 100,
+            max_schema_bytes: 256 * 1024,
         }
     }
 }
@@ -130,6 +132,9 @@ impl ConfigStore {
         self.validate_payload_size(&value)?;
         let mut tx = self.pool.begin().await?;
         let scope_id = ensure_scope(&mut tx, scope).await?;
+        if let Some(schema) = schema_for_scope_id(&mut tx, scope_id).await? {
+            validate_value_against_schema(key, &schema, &value)?;
+        }
         sqlx::query(
             r#"
             INSERT INTO config_items(scope_id, config_key, value_json, deleted, updated_at)
@@ -145,6 +150,47 @@ impl ConfigStore {
         .await?;
         tx.commit().await?;
         Ok(())
+    }
+
+    pub async fn set_schema(&self, scope: &ConfigScope, schema: Option<Value>) -> PgAppResult<()> {
+        validate_scope(scope)?;
+        if let Some(schema) = &schema {
+            self.validate_schema_size(schema)?;
+            validate_json_schema(schema)?;
+        }
+        let mut tx = self.pool.begin().await?;
+        let scope_id = ensure_scope(&mut tx, scope).await?;
+        sqlx::query(
+            r#"
+            UPDATE config_scopes
+            SET json_schema = $2, updated_at = now()
+            WHERE id = $1
+            "#,
+        )
+        .bind(scope_id)
+        .bind(schema)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn get_schema(&self, scope: &ConfigScope) -> PgAppResult<Option<Value>> {
+        validate_scope(scope)?;
+        let schema = sqlx::query_scalar(
+            r#"
+            SELECT json_schema
+            FROM config_scopes
+            WHERE app_id = $1 AND environment = $2 AND cluster = $3 AND namespace = $4
+            "#,
+        )
+        .bind(&scope.app_id)
+        .bind(&scope.environment)
+        .bind(&scope.cluster)
+        .bind(&scope.namespace)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(schema.flatten())
     }
 
     pub async fn delete_item(&self, scope: &ConfigScope, key: &str) -> PgAppResult<bool> {
@@ -226,9 +272,15 @@ impl ConfigStore {
         .bind(scope_id)
         .fetch_all(&mut *tx)
         .await?;
+        let schema = schema_for_scope_id(&mut tx, scope_id).await?;
         let mut snapshot = Map::new();
         for row in rows {
-            snapshot.insert(row.get("config_key"), row.get("value_json"));
+            let key: String = row.get("config_key");
+            let value: Value = row.get("value_json");
+            if let Some(schema) = &schema {
+                validate_value_against_schema(&key, schema, &value)?;
+            }
+            snapshot.insert(key, value);
         }
         let snapshot = Value::Object(snapshot);
         let checksum = checksum_json(&snapshot)?;
@@ -486,6 +538,18 @@ impl ConfigStore {
         Ok(())
     }
 
+    fn validate_schema_size(&self, value: &Value) -> PgAppResult<()> {
+        let bytes = serde_json::to_vec(value)
+            .map_err(|err| PgAppError::InvalidArgument(format!("invalid JSON schema: {err}")))?;
+        if bytes.len() > self.limits.max_schema_bytes {
+            return Err(PgAppError::InvalidArgument(format!(
+                "json_schema exceeds {} bytes",
+                self.limits.max_schema_bytes
+            )));
+        }
+        Ok(())
+    }
+
     fn page(&self, limit: Option<i64>, offset: i64) -> PgAppResult<PageState> {
         if offset < 0 {
             return Err(PgAppError::InvalidArgument(
@@ -548,6 +612,34 @@ async fn ensure_scope(
     .fetch_one(&mut **tx)
     .await?;
     Ok(id)
+}
+
+async fn schema_for_scope_id(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    scope_id: i64,
+) -> PgAppResult<Option<Value>> {
+    let schema: Option<Value> =
+        sqlx::query_scalar("SELECT json_schema FROM config_scopes WHERE id = $1")
+            .bind(scope_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    Ok(schema)
+}
+
+fn validate_json_schema(schema: &Value) -> PgAppResult<()> {
+    jsonschema::validator_for(schema)
+        .map(|_| ())
+        .map_err(|err| PgAppError::InvalidArgument(format!("invalid JSON schema: {err}")))
+}
+
+fn validate_value_against_schema(key: &str, schema: &Value, value: &Value) -> PgAppResult<()> {
+    let validator = jsonschema::validator_for(schema)
+        .map_err(|err| PgAppError::InvalidArgument(format!("invalid JSON schema: {err}")))?;
+    validator.validate(value).map_err(|err| {
+        PgAppError::InvalidArgument(format!(
+            "config key {key} failed JSON schema validation: {err}"
+        ))
+    })
 }
 
 fn validate_scope(scope: &ConfigScope) -> PgAppResult<()> {

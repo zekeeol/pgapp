@@ -75,6 +75,16 @@ class ConfigServiceStub(object):
                 request_serializer=pgapp_dot_v1_dot_config__pb2.WatchConfigRequest.SerializeToString,
                 response_deserializer=pgapp_dot_v1_dot_config__pb2.WatchConfigResponse.FromString,
                 _registered_method=True)
+        self.SetSchema = channel.unary_unary(
+                '/pgapp.v1.ConfigService/SetSchema',
+                request_serializer=pgapp_dot_v1_dot_config__pb2.SetConfigSchemaRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
+                _registered_method=True)
+        self.GetSchema = channel.unary_unary(
+                '/pgapp.v1.ConfigService/GetSchema',
+                request_serializer=pgapp_dot_v1_dot_config__pb2.GetConfigSchemaRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_config__pb2.ConfigSchemaResponse.FromString,
+                _registered_method=True)
 
 
 class ConfigServiceServicer(object):
@@ -128,6 +138,18 @@ class ConfigServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SetSchema(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetSchema(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ConfigServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -170,6 +192,16 @@ def add_ConfigServiceServicer_to_server(servicer, server):
                     servicer.Watch,
                     request_deserializer=pgapp_dot_v1_dot_config__pb2.WatchConfigRequest.FromString,
                     response_serializer=pgapp_dot_v1_dot_config__pb2.WatchConfigResponse.SerializeToString,
+            ),
+            'SetSchema': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetSchema,
+                    request_deserializer=pgapp_dot_v1_dot_config__pb2.SetConfigSchemaRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_common__pb2.OperationResult.SerializeToString,
+            ),
+            'GetSchema': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSchema,
+                    request_deserializer=pgapp_dot_v1_dot_config__pb2.GetConfigSchemaRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_config__pb2.ConfigSchemaResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -388,6 +420,60 @@ class ConfigService(object):
             '/pgapp.v1.ConfigService/Watch',
             pgapp_dot_v1_dot_config__pb2.WatchConfigRequest.SerializeToString,
             pgapp_dot_v1_dot_config__pb2.WatchConfigResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetSchema(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.ConfigService/SetSchema',
+            pgapp_dot_v1_dot_config__pb2.SetConfigSchemaRequest.SerializeToString,
+            pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSchema(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.ConfigService/GetSchema',
+            pgapp_dot_v1_dot_config__pb2.GetConfigSchemaRequest.SerializeToString,
+            pgapp_dot_v1_dot_config__pb2.ConfigSchemaResponse.FromString,
             options,
             channel_credentials,
             insecure,

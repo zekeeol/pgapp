@@ -5,7 +5,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 export PATH="$(go env GOPATH)/bin:$PATH"
 PYTHON_BIN=${PYTHON_BIN:-}
 if [ -z "$PYTHON_BIN" ]; then
-  if [ -x "$ROOT/.venv/bin/python" ]; then
+  if [ -x "$ROOT/sdk/python/.venv/bin/python" ]; then
+    PYTHON_BIN="$ROOT/sdk/python/.venv/bin/python"
+  elif [ -x "$ROOT/.venv/bin/python" ]; then
     PYTHON_BIN="$ROOT/.venv/bin/python"
   elif [ -x "/opt/homebrew/bin/python3" ]; then
     PYTHON_BIN="/opt/homebrew/bin/python3"
@@ -16,6 +18,7 @@ fi
 
 mkdir -p "$ROOT/sdk/go/gen"
 mkdir -p "$ROOT/sdk/python/pgapp_sdk/gen"
+mkdir -p "$ROOT/sdk/typescript/src/gen"
 
 protoc \
   -I "$ROOT/proto" \
@@ -38,3 +41,7 @@ protoc \
   "$ROOT/proto/pgapp/v1/cache.proto" \
   "$ROOT/proto/pgapp/v1/mq.proto" \
   "$ROOT/proto/pgapp/v1/config.proto"
+
+if [ -d "$ROOT/sdk/typescript" ]; then
+  (cd "$ROOT/sdk/typescript" && npm run generate)
+fi

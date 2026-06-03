@@ -10,10 +10,12 @@ use pgapp_core::{
     PgAppError,
     admin::{AdminLogInput, AdminStore, ListQuery, LogFilter},
     cache::CacheStore,
+    client_auth::{ClientRecord, ClientStore, CreatedClient},
     config_center::ConfigScope,
     config_center::ConfigStore,
     db,
     metrics::MetricsRegistry,
+    mq::{DlqMessage, MqStore},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -116,8 +118,27 @@ struct MqSummaryDto {
 
 #[derive(Debug, Serialize)]
 struct ClientActivityResponse {
+    items: Vec<ClientCredentialDto>,
     admin_sessions: Vec<AdminSessionDto>,
     api_activity: Vec<MethodMetricDto>,
+}
+
+#[derive(Debug, Serialize)]
+struct ClientCredentialDto {
+    id: i64,
+    client_key: String,
+    active: bool,
+    roles: Vec<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+struct CreatedClientDto {
+    id: i64,
+    client_key: String,
+    secret: String,
+    roles: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -141,6 +162,18 @@ struct PublishConfigBody {
     published_by: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ConfigSchemaBody {
+    scope: ConfigScope,
+    schema: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateClientBody {
+    client_key: String,
+    roles: Option<Vec<String>>,
+}
+
 pub(crate) fn router(state: AdminHttpState) -> Router {
     Router::new()
         .route("/api/admin/overview", get(overview))
@@ -156,10 +189,37 @@ pub(crate) fn router(state: AdminHttpState) -> Router {
             put(config_upsert_item).delete(config_delete_item),
         )
         .route(
+            "/api/admin/config/schema",
+            get(config_schema_get)
+                .put(config_schema_set)
+                .delete(config_schema_delete),
+        )
+        .route(
             "/api/admin/config/releases",
             get(config_releases).post(config_publish),
         )
-        .route("/api/admin/clients", get(clients))
+        .route("/api/admin/mq/queues/{queue}/dlq", get(mq_dlq_messages))
+        .route(
+            "/api/admin/mq/queues/{queue}/dlq/purge",
+            axum::routing::post(mq_dlq_purge),
+        )
+        .route(
+            "/api/admin/mq/queues/{queue}/dlq/{message_id}",
+            get(mq_dlq_message),
+        )
+        .route(
+            "/api/admin/mq/queues/{queue}/dlq/{message_id}/reprocess",
+            axum::routing::post(mq_dlq_reprocess),
+        )
+        .route("/api/admin/clients", get(clients).post(client_create))
+        .route(
+            "/api/admin/clients/{client_key}/rotate",
+            axum::routing::post(client_rotate),
+        )
+        .route(
+            "/api/admin/clients/{client_key}/deactivate",
+            axum::routing::post(client_deactivate),
+        )
         .with_state(state)
 }
 
@@ -332,6 +392,124 @@ async fn mq_messages(
     response
 }
 
+async fn mq_dlq_messages(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Path(queue): Path<String>,
+    Query(params): Query<ListParams>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let limit = params.limit.unwrap_or(50);
+    let offset = params.offset.unwrap_or(0);
+    let result = MqStore::new(state.pool.clone(), false)
+        .list_dlq_messages(&queue, limit, offset)
+        .await
+        .map(|page| {
+            json!({
+                "items": page.messages.into_iter().map(dlq_message_dto).collect::<Vec<_>>(),
+                "limit": limit,
+                "offset": offset,
+                "next_offset": page.next_offset
+            })
+        });
+    let response = match result {
+        Ok(page) => json_response(StatusCode::OK, &request_id, page),
+        Err(err) => admin_store_error("mq dlq messages unavailable", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/mq/queues/{queue}/dlq").await;
+    response
+}
+
+async fn mq_dlq_message(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Path((queue, message_id)): Path<(String, i64)>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = MqStore::new(state.pool.clone(), false)
+        .get_dlq_message(&queue, message_id)
+        .await
+        .map(dlq_message_dto);
+    let response = match result {
+        Ok(message) => json_response(StatusCode::OK, &request_id, message),
+        Err(err) => admin_store_error("mq dlq message unavailable", &request_id, err),
+    };
+    record_request(
+        &state,
+        &request_id,
+        "/api/admin/mq/queues/{queue}/dlq/{message_id}",
+    )
+    .await;
+    response
+}
+
+async fn mq_dlq_reprocess(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Path((queue, message_id)): Path<(String, i64)>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = MqStore::new(state.pool.clone(), false)
+        .reprocess_dlq_message(&queue, message_id)
+        .await
+        .and_then(|success| {
+            if success {
+                Ok(success)
+            } else {
+                Err(PgAppError::NotFound(format!("DLQ message {message_id}")))
+            }
+        });
+    let response = match result {
+        Ok(success) => json_response(StatusCode::OK, &request_id, json!({"success": success})),
+        Err(err) => admin_store_error("mq dlq reprocess rejected", &request_id, err),
+    };
+    record_request(
+        &state,
+        &request_id,
+        "/api/admin/mq/queues/{queue}/dlq/{message_id}/reprocess",
+    )
+    .await;
+    response
+}
+
+async fn mq_dlq_purge(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Path(queue): Path<String>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = MqStore::new(state.pool.clone(), false)
+        .purge_dlq(&queue)
+        .await;
+    let response = match result {
+        Ok(deleted_count) => json_response(
+            StatusCode::OK,
+            &request_id,
+            json!({"deleted_count": deleted_count}),
+        ),
+        Err(err) => admin_store_error("mq dlq purge rejected", &request_id, err),
+    };
+    record_request(
+        &state,
+        &request_id,
+        "/api/admin/mq/queues/{queue}/dlq/purge",
+    )
+    .await;
+    response
+}
+
 async fn clients(State(state): State<AdminHttpState>, headers: HeaderMap) -> Response {
     let request_id = request_id();
     if let Err(response) = authorize(&state, &headers, &request_id).await {
@@ -343,6 +521,86 @@ async fn clients(State(state): State<AdminHttpState>, headers: HeaderMap) -> Res
         Err(err) => admin_error("client activity unavailable", &request_id, err),
     };
     record_request(&state, &request_id, "/api/admin/clients").await;
+    response
+}
+
+async fn client_create(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Json(body): Json<CreateClientBody>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = ClientStore::new(state.pool.clone())
+        .create_client(&body.client_key, body.roles.unwrap_or_default())
+        .await;
+    let response = match result {
+        Ok(client) => json_response(StatusCode::CREATED, &request_id, created_client_dto(client)),
+        Err(err) => admin_store_error("client credential create rejected", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/clients").await;
+    response
+}
+
+async fn client_rotate(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Path(client_key): Path<String>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = ClientStore::new(state.pool.clone())
+        .rotate_secret(&client_key)
+        .await
+        .and_then(|client| {
+            client.ok_or_else(|| PgAppError::NotFound(format!("client {client_key}")))
+        });
+    let response = match result {
+        Ok(client) => json_response(StatusCode::OK, &request_id, created_client_dto(client)),
+        Err(err) => admin_store_error("client credential rotate rejected", &request_id, err),
+    };
+    record_request(
+        &state,
+        &request_id,
+        "/api/admin/clients/{client_key}/rotate",
+    )
+    .await;
+    response
+}
+
+async fn client_deactivate(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Path(client_key): Path<String>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = ClientStore::new(state.pool.clone())
+        .deactivate(&client_key)
+        .await
+        .and_then(|success| {
+            if success {
+                Ok(success)
+            } else {
+                Err(PgAppError::NotFound(format!("client {client_key}")))
+            }
+        });
+    let response = match result {
+        Ok(success) => json_response(StatusCode::OK, &request_id, json!({"success": success})),
+        Err(err) => admin_store_error("client credential deactivate rejected", &request_id, err),
+    };
+    record_request(
+        &state,
+        &request_id,
+        "/api/admin/clients/{client_key}/deactivate",
+    )
+    .await;
     response
 }
 
@@ -435,6 +693,75 @@ async fn config_delete_item(
         Err(err) => admin_store_error("config item delete rejected", &request_id, err),
     };
     record_request(&state, &request_id, "/api/admin/config/items").await;
+    response
+}
+
+async fn config_schema_get(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Query(params): Query<ListParams>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = match config_scope_from_query(&params) {
+        Ok(scope) => state.config_store.get_schema(&scope).await.map(|schema| {
+            json!({
+                "scope": scope,
+                "has_schema": schema.is_some(),
+                "schema": schema
+            })
+        }),
+        Err(err) => Err(err),
+    };
+    let response = match result {
+        Ok(body) => json_response(StatusCode::OK, &request_id, body),
+        Err(err) => admin_store_error("config schema unavailable", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/schema").await;
+    response
+}
+
+async fn config_schema_set(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ConfigSchemaBody>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = state
+        .config_store
+        .set_schema(&body.scope, body.schema)
+        .await;
+    let response = match result {
+        Ok(()) => json_response(StatusCode::OK, &request_id, json!({"success": true})),
+        Err(err) => admin_store_error("config schema update rejected", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/schema").await;
+    response
+}
+
+async fn config_schema_delete(
+    State(state): State<AdminHttpState>,
+    headers: HeaderMap,
+    Query(params): Query<ListParams>,
+) -> Response {
+    let request_id = request_id();
+    if let Err(response) = authorize(&state, &headers, &request_id).await {
+        return response;
+    }
+    let result = match config_scope_from_query(&params) {
+        Ok(scope) => state.config_store.set_schema(&scope, None).await,
+        Err(err) => Err(err),
+    };
+    let response = match result {
+        Ok(()) => json_response(StatusCode::OK, &request_id, json!({"success": true})),
+        Err(err) => admin_store_error("config schema delete rejected", &request_id, err),
+    };
+    record_request(&state, &request_id, "/api/admin/config/schema").await;
     response
 }
 
@@ -581,7 +908,7 @@ async fn mq_summary(pool: &sqlx::PgPool) -> Result<MqSummaryDto, sqlx::Error> {
     })
 }
 
-async fn client_activity(state: &AdminHttpState) -> Result<ClientActivityResponse, sqlx::Error> {
+async fn client_activity(state: &AdminHttpState) -> Result<ClientActivityResponse, PgAppError> {
     let rows = sqlx::query(
         r#"
         SELECT
@@ -598,8 +925,15 @@ async fn client_activity(state: &AdminHttpState) -> Result<ClientActivityRespons
     )
     .fetch_all(&state.pool)
     .await?;
+    let items = ClientStore::new(state.pool.clone())
+        .list_clients()
+        .await?
+        .into_iter()
+        .map(client_credential_dto)
+        .collect();
 
     Ok(ClientActivityResponse {
+        items,
         admin_sessions: rows
             .into_iter()
             .map(|row| AdminSessionDto {
@@ -609,6 +943,38 @@ async fn client_activity(state: &AdminHttpState) -> Result<ClientActivityRespons
             })
             .collect(),
         api_activity: method_metrics(&state.metrics),
+    })
+}
+
+fn client_credential_dto(record: ClientRecord) -> ClientCredentialDto {
+    ClientCredentialDto {
+        id: record.id,
+        client_key: record.client_key,
+        active: record.active,
+        roles: record.roles,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+    }
+}
+
+fn created_client_dto(client: CreatedClient) -> CreatedClientDto {
+    CreatedClientDto {
+        id: client.id,
+        client_key: client.client_key,
+        secret: client.secret,
+        roles: client.roles,
+    }
+}
+
+fn dlq_message_dto(message: DlqMessage) -> Value {
+    json!({
+        "id": message.id,
+        "original_message_id": message.original_message_id,
+        "read_count": message.read_count,
+        "enqueued_at": message.enqueued_at,
+        "dead_lettered_at": message.dead_lettered_at,
+        "payload": message.payload,
+        "reason": message.reason
     })
 }
 
@@ -756,6 +1122,8 @@ fn admin_store_error(message: &str, request_id: &str, err: PgAppError) -> Respon
     let detail = err.to_string();
     let (status, code) = match &err {
         PgAppError::InvalidArgument(_) => (StatusCode::BAD_REQUEST, "invalid_argument"),
+        PgAppError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
+        PgAppError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
         _ => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
     };
     error_response(status, code, message, request_id, Some(detail))

@@ -973,6 +973,162 @@ func (x *WatchConfigResponse) GetRelease() *ConfigRelease {
 	return nil
 }
 
+type SetConfigSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *ConfigScope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	JsonSchema    string                 `protobuf:"bytes,2,opt,name=json_schema,json=jsonSchema,proto3" json:"json_schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetConfigSchemaRequest) Reset() {
+	*x = SetConfigSchemaRequest{}
+	mi := &file_pgapp_v1_config_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetConfigSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetConfigSchemaRequest) ProtoMessage() {}
+
+func (x *SetConfigSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_config_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetConfigSchemaRequest.ProtoReflect.Descriptor instead.
+func (*SetConfigSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_config_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SetConfigSchemaRequest) GetScope() *ConfigScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *SetConfigSchemaRequest) GetJsonSchema() string {
+	if x != nil {
+		return x.JsonSchema
+	}
+	return ""
+}
+
+type GetConfigSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *ConfigScope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetConfigSchemaRequest) Reset() {
+	*x = GetConfigSchemaRequest{}
+	mi := &file_pgapp_v1_config_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetConfigSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetConfigSchemaRequest) ProtoMessage() {}
+
+func (x *GetConfigSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_config_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetConfigSchemaRequest.ProtoReflect.Descriptor instead.
+func (*GetConfigSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_config_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetConfigSchemaRequest) GetScope() *ConfigScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+type ConfigSchemaResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *ConfigScope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	HasSchema     bool                   `protobuf:"varint,2,opt,name=has_schema,json=hasSchema,proto3" json:"has_schema,omitempty"`
+	JsonSchema    string                 `protobuf:"bytes,3,opt,name=json_schema,json=jsonSchema,proto3" json:"json_schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigSchemaResponse) Reset() {
+	*x = ConfigSchemaResponse{}
+	mi := &file_pgapp_v1_config_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigSchemaResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigSchemaResponse) ProtoMessage() {}
+
+func (x *ConfigSchemaResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_config_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigSchemaResponse.ProtoReflect.Descriptor instead.
+func (*ConfigSchemaResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_config_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ConfigSchemaResponse) GetScope() *ConfigScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *ConfigSchemaResponse) GetHasSchema() bool {
+	if x != nil {
+		return x.HasSchema
+	}
+	return false
+}
+
+func (x *ConfigSchemaResponse) GetJsonSchema() string {
+	if x != nil {
+		return x.JsonSchema
+	}
+	return ""
+}
+
 var File_pgapp_v1_config_proto protoreflect.FileDescriptor
 
 const file_pgapp_v1_config_proto_rawDesc = "" +
@@ -1048,7 +1204,19 @@ const file_pgapp_v1_config_proto_rawDesc = "" +
 	"\x13WatchConfigResponse\x12\x18\n" +
 	"\achanged\x18\x01 \x01(\bR\achanged\x12'\n" +
 	"\x0flatest_revision\x18\x02 \x01(\x03R\x0elatestRevision\x121\n" +
-	"\arelease\x18\x03 \x01(\v2\x17.pgapp.v1.ConfigReleaseR\arelease2\xf7\x04\n" +
+	"\arelease\x18\x03 \x01(\v2\x17.pgapp.v1.ConfigReleaseR\arelease\"f\n" +
+	"\x16SetConfigSchemaRequest\x12+\n" +
+	"\x05scope\x18\x01 \x01(\v2\x15.pgapp.v1.ConfigScopeR\x05scope\x12\x1f\n" +
+	"\vjson_schema\x18\x02 \x01(\tR\n" +
+	"jsonSchema\"E\n" +
+	"\x16GetConfigSchemaRequest\x12+\n" +
+	"\x05scope\x18\x01 \x01(\v2\x15.pgapp.v1.ConfigScopeR\x05scope\"\x83\x01\n" +
+	"\x14ConfigSchemaResponse\x12+\n" +
+	"\x05scope\x18\x01 \x01(\v2\x15.pgapp.v1.ConfigScopeR\x05scope\x12\x1d\n" +
+	"\n" +
+	"has_schema\x18\x02 \x01(\bR\thasSchema\x12\x1f\n" +
+	"\vjson_schema\x18\x03 \x01(\tR\n" +
+	"jsonSchema2\x90\x06\n" +
 	"\rConfigService\x12S\n" +
 	"\n" +
 	"ListScopes\x12!.pgapp.v1.ListConfigScopesRequest\x1a\".pgapp.v1.ListConfigScopesResponse\x12J\n" +
@@ -1061,7 +1229,9 @@ const file_pgapp_v1_config_proto_rawDesc = "" +
 	"\n" +
 	"GetRelease\x12!.pgapp.v1.GetConfigReleaseRequest\x1a\x17.pgapp.v1.ConfigRelease\x12Y\n" +
 	"\fListReleases\x12#.pgapp.v1.ListConfigReleasesRequest\x1a$.pgapp.v1.ListConfigReleasesResponse\x12D\n" +
-	"\x05Watch\x12\x1c.pgapp.v1.WatchConfigRequest\x1a\x1d.pgapp.v1.WatchConfigResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3"
+	"\x05Watch\x12\x1c.pgapp.v1.WatchConfigRequest\x1a\x1d.pgapp.v1.WatchConfigResponse\x12H\n" +
+	"\tSetSchema\x12 .pgapp.v1.SetConfigSchemaRequest\x1a\x19.pgapp.v1.OperationResult\x12M\n" +
+	"\tGetSchema\x12 .pgapp.v1.GetConfigSchemaRequest\x1a\x1e.pgapp.v1.ConfigSchemaResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3"
 
 var (
 	file_pgapp_v1_config_proto_rawDescOnce sync.Once
@@ -1075,7 +1245,7 @@ func file_pgapp_v1_config_proto_rawDescGZIP() []byte {
 	return file_pgapp_v1_config_proto_rawDescData
 }
 
-var file_pgapp_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pgapp_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_pgapp_v1_config_proto_goTypes = []any{
 	(*ConfigScope)(nil),                // 0: pgapp.v1.ConfigScope
 	(*ConfigItem)(nil),                 // 1: pgapp.v1.ConfigItem
@@ -1093,7 +1263,10 @@ var file_pgapp_v1_config_proto_goTypes = []any{
 	(*ListConfigReleasesResponse)(nil), // 13: pgapp.v1.ListConfigReleasesResponse
 	(*WatchConfigRequest)(nil),         // 14: pgapp.v1.WatchConfigRequest
 	(*WatchConfigResponse)(nil),        // 15: pgapp.v1.WatchConfigResponse
-	(*OperationResult)(nil),            // 16: pgapp.v1.OperationResult
+	(*SetConfigSchemaRequest)(nil),     // 16: pgapp.v1.SetConfigSchemaRequest
+	(*GetConfigSchemaRequest)(nil),     // 17: pgapp.v1.GetConfigSchemaRequest
+	(*ConfigSchemaResponse)(nil),       // 18: pgapp.v1.ConfigSchemaResponse
+	(*OperationResult)(nil),            // 19: pgapp.v1.OperationResult
 }
 var file_pgapp_v1_config_proto_depIdxs = []int32{
 	0,  // 0: pgapp.v1.ConfigRelease.scope:type_name -> pgapp.v1.ConfigScope
@@ -1110,27 +1283,34 @@ var file_pgapp_v1_config_proto_depIdxs = []int32{
 	2,  // 11: pgapp.v1.ListConfigReleasesResponse.releases:type_name -> pgapp.v1.ConfigRelease
 	0,  // 12: pgapp.v1.WatchConfigRequest.scope:type_name -> pgapp.v1.ConfigScope
 	2,  // 13: pgapp.v1.WatchConfigResponse.release:type_name -> pgapp.v1.ConfigRelease
-	3,  // 14: pgapp.v1.ConfigService.ListScopes:input_type -> pgapp.v1.ListConfigScopesRequest
-	6,  // 15: pgapp.v1.ConfigService.UpsertItem:input_type -> pgapp.v1.UpsertConfigItemRequest
-	7,  // 16: pgapp.v1.ConfigService.DeleteItem:input_type -> pgapp.v1.DeleteConfigItemRequest
-	8,  // 17: pgapp.v1.ConfigService.GetDraft:input_type -> pgapp.v1.GetConfigDraftRequest
-	10, // 18: pgapp.v1.ConfigService.Publish:input_type -> pgapp.v1.PublishConfigRequest
-	11, // 19: pgapp.v1.ConfigService.GetRelease:input_type -> pgapp.v1.GetConfigReleaseRequest
-	12, // 20: pgapp.v1.ConfigService.ListReleases:input_type -> pgapp.v1.ListConfigReleasesRequest
-	14, // 21: pgapp.v1.ConfigService.Watch:input_type -> pgapp.v1.WatchConfigRequest
-	5,  // 22: pgapp.v1.ConfigService.ListScopes:output_type -> pgapp.v1.ListConfigScopesResponse
-	16, // 23: pgapp.v1.ConfigService.UpsertItem:output_type -> pgapp.v1.OperationResult
-	16, // 24: pgapp.v1.ConfigService.DeleteItem:output_type -> pgapp.v1.OperationResult
-	9,  // 25: pgapp.v1.ConfigService.GetDraft:output_type -> pgapp.v1.ConfigDraftResponse
-	2,  // 26: pgapp.v1.ConfigService.Publish:output_type -> pgapp.v1.ConfigRelease
-	2,  // 27: pgapp.v1.ConfigService.GetRelease:output_type -> pgapp.v1.ConfigRelease
-	13, // 28: pgapp.v1.ConfigService.ListReleases:output_type -> pgapp.v1.ListConfigReleasesResponse
-	15, // 29: pgapp.v1.ConfigService.Watch:output_type -> pgapp.v1.WatchConfigResponse
-	22, // [22:30] is the sub-list for method output_type
-	14, // [14:22] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	0,  // 14: pgapp.v1.SetConfigSchemaRequest.scope:type_name -> pgapp.v1.ConfigScope
+	0,  // 15: pgapp.v1.GetConfigSchemaRequest.scope:type_name -> pgapp.v1.ConfigScope
+	0,  // 16: pgapp.v1.ConfigSchemaResponse.scope:type_name -> pgapp.v1.ConfigScope
+	3,  // 17: pgapp.v1.ConfigService.ListScopes:input_type -> pgapp.v1.ListConfigScopesRequest
+	6,  // 18: pgapp.v1.ConfigService.UpsertItem:input_type -> pgapp.v1.UpsertConfigItemRequest
+	7,  // 19: pgapp.v1.ConfigService.DeleteItem:input_type -> pgapp.v1.DeleteConfigItemRequest
+	8,  // 20: pgapp.v1.ConfigService.GetDraft:input_type -> pgapp.v1.GetConfigDraftRequest
+	10, // 21: pgapp.v1.ConfigService.Publish:input_type -> pgapp.v1.PublishConfigRequest
+	11, // 22: pgapp.v1.ConfigService.GetRelease:input_type -> pgapp.v1.GetConfigReleaseRequest
+	12, // 23: pgapp.v1.ConfigService.ListReleases:input_type -> pgapp.v1.ListConfigReleasesRequest
+	14, // 24: pgapp.v1.ConfigService.Watch:input_type -> pgapp.v1.WatchConfigRequest
+	16, // 25: pgapp.v1.ConfigService.SetSchema:input_type -> pgapp.v1.SetConfigSchemaRequest
+	17, // 26: pgapp.v1.ConfigService.GetSchema:input_type -> pgapp.v1.GetConfigSchemaRequest
+	5,  // 27: pgapp.v1.ConfigService.ListScopes:output_type -> pgapp.v1.ListConfigScopesResponse
+	19, // 28: pgapp.v1.ConfigService.UpsertItem:output_type -> pgapp.v1.OperationResult
+	19, // 29: pgapp.v1.ConfigService.DeleteItem:output_type -> pgapp.v1.OperationResult
+	9,  // 30: pgapp.v1.ConfigService.GetDraft:output_type -> pgapp.v1.ConfigDraftResponse
+	2,  // 31: pgapp.v1.ConfigService.Publish:output_type -> pgapp.v1.ConfigRelease
+	2,  // 32: pgapp.v1.ConfigService.GetRelease:output_type -> pgapp.v1.ConfigRelease
+	13, // 33: pgapp.v1.ConfigService.ListReleases:output_type -> pgapp.v1.ListConfigReleasesResponse
+	15, // 34: pgapp.v1.ConfigService.Watch:output_type -> pgapp.v1.WatchConfigResponse
+	19, // 35: pgapp.v1.ConfigService.SetSchema:output_type -> pgapp.v1.OperationResult
+	18, // 36: pgapp.v1.ConfigService.GetSchema:output_type -> pgapp.v1.ConfigSchemaResponse
+	27, // [27:37] is the sub-list for method output_type
+	17, // [17:27] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_pgapp_v1_config_proto_init() }
@@ -1145,7 +1325,7 @@ func file_pgapp_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pgapp_v1_config_proto_rawDesc), len(file_pgapp_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

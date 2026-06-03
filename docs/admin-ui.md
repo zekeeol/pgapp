@@ -45,9 +45,12 @@ GET /api/admin/cache/namespaces
 GET /api/admin/cache/entries
 GET /api/admin/mq/queues
 GET /api/admin/mq/queues/{queue}/messages
+GET /api/admin/mq/queues/{queue}/dlq
+GET /api/admin/mq/queues/{queue}/dlq/{message_id}
 GET /api/admin/config/scopes
 GET /api/admin/config/draft
 GET /api/admin/config/releases
+GET /api/admin/config/schema
 ```
 
 List routes support bounded pagination through `limit` and `offset`. The server
@@ -59,11 +62,23 @@ Config mutation routes:
 PUT /api/admin/config/items
 DELETE /api/admin/config/items
 POST /api/admin/config/releases
+PUT /api/admin/config/schema
+DELETE /api/admin/config/schema
+POST /api/admin/mq/queues/{queue}/dlq/{message_id}/reprocess
+POST /api/admin/mq/queues/{queue}/dlq/purge
+POST /api/admin/clients
+POST /api/admin/clients/{client_key}/rotate
+POST /api/admin/clients/{client_key}/deactivate
 ```
 
 Config item writes accept a scope, key, and JSON value. The write updates draft
 state only. `POST /api/admin/config/releases` publishes the current draft as a
 client-visible immutable release snapshot.
+
+JSON Schema routes attach or remove the optional per-scope schema used to
+validate draft upserts and publish attempts. DLQ routes operate only on dead
+letter entries, not active MQ messages. Client credential routes create, rotate,
+or deactivate gRPC key+secret credentials.
 
 ## Read-Only Limits
 
@@ -79,6 +94,9 @@ The Admin API does not expose MQ mutation routes:
 - no ack or archive
 - no purge or drop
 - no visibility timeout changes
+
+DLQ reprocess and purge are intentionally available because they operate on
+dead-letter entries after a message has left the active queue.
 
 Cache inspection reads from `cache_namespaces`, `cache_entries`, and
 `cache_stats` without calling Cache `get`, so it does not increment hit/miss
@@ -96,11 +114,20 @@ Config scopes use:
 app_id / environment / cluster / namespace
 ```
 
-The UI shows scope rows, draft items, a JSON editor, a publish action, and
-release history. Invalid JSON is rejected before submission where possible, and
-server-side validation returns stable `invalid_argument` errors. Config Center
-does not add secret-specific display behavior in this version; sensitive values
-should be stored in a dedicated secret manager.
+The UI shows scope rows, draft items, a JSON editor, JSON Schema editor, publish
+action, and release history. Invalid JSON is rejected before submission where
+possible, and server-side schema validation returns stable `invalid_argument`
+errors. Config Center does not add secret-specific display behavior in this
+version; sensitive values should be stored in a dedicated secret manager.
+
+See [config-center.md](config-center.md) for the draft/publish model, long-poll
+semantics, and JSON Schema behavior.
+
+## Client Credentials
+
+The Clients section lists active and inactive gRPC clients and lets an operator
+create, rotate, or deactivate credentials. Create and rotate responses show the
+plaintext secret once; after that only the Argon2 hash remains in PostgreSQL.
 
 ## Logs
 

@@ -198,6 +198,75 @@ func TestLiveGoSDKPreservesErrorStatus(t *testing.T) {
 	}
 }
 
+func TestLiveGoSDKPhaseTwoCacheMQAndStreamSurface(t *testing.T) {
+	endpoint := liveEndpoint(t)
+	client, err := pgapp.Dial(context.Background(), endpoint, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suffix := time.Now().UnixNano()
+	namespace := fmt.Sprintf("go_sdk_phase_two_cache_%d", suffix)
+	queue := fmt.Sprintf("go_sdk_phase_two_orders_%d", suffix)
+
+	value, err := client.Cache().Increment(context.Background(), namespace, "counter", 2, 60)
+	if err != nil || value != 2 {
+		t.Fatalf("increment failed: value=%d err=%v", value, err)
+	}
+	value, err = client.Cache().Decrement(context.Background(), namespace, "counter", 1, 0)
+	if err != nil || value != 1 {
+		t.Fatalf("decrement failed: value=%d err=%v", value, err)
+	}
+	created, err := client.Cache().SetNX(context.Background(), namespace, "lock", []byte("first"), 60)
+	if err != nil || !created {
+		t.Fatalf("set nx failed: created=%v err=%v", created, err)
+	}
+	created, err = client.Cache().SetNX(context.Background(), namespace, "lock", []byte("second"), 60)
+	if err != nil || created {
+		t.Fatalf("set nx existing failed: created=%v err=%v", created, err)
+	}
+	old, hit, err := client.Cache().GetSet(context.Background(), namespace, "slot", []byte("new"), 60)
+	if err != nil || hit || old != nil {
+		t.Fatalf("unexpected first getset: old=%q hit=%v err=%v", old, hit, err)
+	}
+	old, hit, err = client.Cache().GetSet(context.Background(), namespace, "slot", []byte("newer"), 0)
+	if err != nil || !hit || string(old) != "new" {
+		t.Fatalf("unexpected second getset: old=%q hit=%v err=%v", old, hit, err)
+	}
+	length, err := client.Cache().Append(context.Background(), namespace, "log", []byte("tail"), 0)
+	if err != nil || length != 4 {
+		t.Fatalf("append failed: length=%d err=%v", length, err)
+	}
+	length, err = client.Cache().Prepend(context.Background(), namespace, "log", []byte("head-"), 0)
+	if err != nil || length != 9 {
+		t.Fatalf("prepend failed: length=%d err=%v", length, err)
+	}
+
+	ok, err := client.MQ().CreateQueue(context.Background(), queue)
+	if err != nil || !ok {
+		t.Fatalf("create queue failed: ok=%v err=%v", ok, err)
+	}
+	dlq, err := client.MQ().ListDLQMessages(context.Background(), queue, 10, 0)
+	if err != nil || len(dlq) != 0 {
+		t.Fatalf("unexpected empty dlq: %#v err=%v", dlq, err)
+	}
+	stream, err := client.MQ().StreamRead(context.Background(), queue, 1, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messageID, err := client.MQ().SendJSON(context.Background(), queue, map[string]bool{"stream": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := stream.Recv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(read.Messages) != 1 || read.Messages[0].MessageId != messageID {
+		t.Fatalf("unexpected stream response: %#v", read.Messages)
+	}
+}
+
 func liveEndpoint(t *testing.T) string {
 	t.Helper()
 	endpoint := getenv("PGAPP_TEST_ENDPOINT")

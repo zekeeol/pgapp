@@ -1,11 +1,14 @@
-use pgapp_core::{config::ServerConfig, db};
+use pgapp_core::{client_auth::ClientStore, config::ServerConfig, db};
 use pgapp_proto::pgapp::v1::{
-    AckMessageRequest, ConfigScope, CreateQueueRequest, GetCacheRequest, GetConfigReleaseRequest,
-    HealthRequest, PublishConfigRequest, QueueStorageMode, ReadMessagesRequest, ReadinessRequest,
-    RuntimeMetricsRequest, SendMessageRequest, SetCacheRequest, UpsertConfigItemRequest,
-    WatchConfigRequest, cache_service_client::CacheServiceClient,
-    config_service_client::ConfigServiceClient, health_service_client::HealthServiceClient,
-    mq_service_client::MqServiceClient,
+    AckMessageRequest, AppendRequest, ConfigScope, CreateQueueRequest, DecrementRequest,
+    GetCacheRequest, GetConfigReleaseRequest, GetConfigSchemaRequest, GetDlqMessageRequest,
+    GetSetRequest, HealthRequest, IncrementRequest, ListDlqMessagesRequest, PrependRequest,
+    PublishConfigRequest, QueueMetricsRequest, QueueStorageMode, ReadMessagesRequest,
+    ReadinessRequest, ReprocessDlqMessageRequest, RuntimeMetricsRequest, SendMessageRequest,
+    SetCacheRequest, SetConfigSchemaRequest, SetNxRequest, SetVisibilityTimeoutRequest,
+    StreamReadRequest, UpsertConfigItemRequest, WatchConfigRequest,
+    cache_service_client::CacheServiceClient, config_service_client::ConfigServiceClient,
+    health_service_client::HealthServiceClient, mq_service_client::MqServiceClient,
 };
 use std::{
     collections::HashMap,
@@ -44,6 +47,18 @@ async fn spawn_server_with_env(
     let endpoint = format!("http://{addr}");
     wait_for_server(&endpoint).await.ok()?;
     Some(endpoint)
+}
+
+async fn create_test_client_credentials() -> Option<(String, String)> {
+    let database_url = std::env::var("DATABASE_URL").ok()?;
+    let pool = db::connect(&database_url, 1, 5).await.ok()?;
+    db::apply_schema(&pool).await.ok()?;
+    let key = unique("grpc_auth_client");
+    let created = ClientStore::new(pool)
+        .create_client(&key, vec!["cache".to_string()])
+        .await
+        .ok()?;
+    Some((created.client_key, created.secret))
 }
 
 fn free_addr() -> SocketAddr {
@@ -138,6 +153,254 @@ async fn cache_grpc_round_trip() {
 }
 
 #[tokio::test]
+async fn grpc_auth_requires_valid_credentials_and_bypasses_health() {
+    let Some((key, secret)) = create_test_client_credentials().await else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let Some(endpoint) = spawn_server_with_env(
+        true,
+        true,
+        HashMap::from([("PGAPP_ENABLE_AUTH".to_string(), "true".to_string())]),
+    )
+    .await
+    else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+
+    let mut health = HealthServiceClient::connect(endpoint.clone())
+        .await
+        .unwrap();
+    assert!(
+        health
+            .get_health(HealthRequest {})
+            .await
+            .unwrap()
+            .into_inner()
+            .live
+    );
+
+    let mut unauthenticated = CacheServiceClient::connect(endpoint.clone()).await.unwrap();
+    let err = unauthenticated
+        .get(GetCacheRequest {
+            namespace: "auth_ns".to_string(),
+            key: "missing".to_string(),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::Unauthenticated);
+
+    let mut wrong_secret = CacheServiceClient::connect(endpoint.clone()).await.unwrap();
+    let mut request = tonic::Request::new(GetCacheRequest {
+        namespace: "auth_ns".to_string(),
+        key: "wrong".to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("x-pgapp-key", key.parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("x-pgapp-secret", "wrong-secret".parse().unwrap());
+    let err = wrong_secret.get(request).await.unwrap_err();
+    assert_eq!(err.code(), Code::Unauthenticated);
+
+    let mut authenticated = CacheServiceClient::connect(endpoint.clone()).await.unwrap();
+    let mut request = tonic::Request::new(GetCacheRequest {
+        namespace: "auth_ns".to_string(),
+        key: "allowed".to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("x-pgapp-key", key.parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("x-pgapp-secret", secret.parse().unwrap());
+    let response = authenticated.get(request).await.unwrap().into_inner();
+    assert!(!response.hit);
+
+    let mut health = HealthServiceClient::connect(endpoint).await.unwrap();
+    let mut metrics_request = tonic::Request::new(RuntimeMetricsRequest {});
+    metrics_request
+        .metadata_mut()
+        .insert("x-pgapp-key", key.parse().unwrap());
+    metrics_request
+        .metadata_mut()
+        .insert("x-pgapp-secret", secret.parse().unwrap());
+    let metrics = health
+        .get_runtime_metrics(metrics_request)
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(
+        metrics.methods.iter().any(|metric| {
+            metric.service == "auth"
+                && metric.method == "authenticate"
+                && metric.status == "unauthenticated"
+                && metric.errors >= 1
+        }),
+        "expected auth failure metrics, got {:?}",
+        metrics.methods
+    );
+}
+
+#[tokio::test]
+async fn grpc_auth_disabled_accepts_requests_without_credentials() {
+    let Some(endpoint) = spawn_server(true, true).await else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut client = CacheServiceClient::connect(endpoint).await.unwrap();
+    let response = client
+        .get(GetCacheRequest {
+            namespace: "authdisabled".to_string(),
+            key: "missing".to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(!response.hit);
+}
+
+#[tokio::test]
+async fn cache_grpc_atomic_operations_round_trip() {
+    let Some(endpoint) = spawn_server(true, true).await else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut client = CacheServiceClient::connect(endpoint).await.unwrap();
+    let namespace = unique("grpc_atomic_cache");
+
+    let increment = client
+        .increment(IncrementRequest {
+            namespace: namespace.clone(),
+            key: "counter".to_string(),
+            delta: 5,
+            ttl_seconds: 60,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(increment.value, 5);
+    let decrement = client
+        .decrement(DecrementRequest {
+            namespace: namespace.clone(),
+            key: "counter".to_string(),
+            delta: 2,
+            ttl_seconds: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(decrement.value, 3);
+
+    let set_nx = client
+        .set_nx(SetNxRequest {
+            namespace: namespace.clone(),
+            key: "lock".to_string(),
+            value: b"first".to_vec(),
+            ttl_seconds: 60,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(set_nx.created);
+    let set_nx_again = client
+        .set_nx(SetNxRequest {
+            namespace: namespace.clone(),
+            key: "lock".to_string(),
+            value: b"second".to_vec(),
+            ttl_seconds: 60,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(!set_nx_again.created);
+
+    let first_get_set = client
+        .get_set(GetSetRequest {
+            namespace: namespace.clone(),
+            key: "slot".to_string(),
+            value: b"new".to_vec(),
+            ttl_seconds: 60,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(!first_get_set.hit);
+    let second_get_set = client
+        .get_set(GetSetRequest {
+            namespace: namespace.clone(),
+            key: "slot".to_string(),
+            value: b"newer".to_vec(),
+            ttl_seconds: 60,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(second_get_set.hit);
+    assert_eq!(second_get_set.old_value, b"new");
+
+    assert_eq!(
+        client
+            .append(AppendRequest {
+                namespace: namespace.clone(),
+                key: "log".to_string(),
+                value: b"tail".to_vec(),
+                ttl_seconds: 0,
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .length,
+        4
+    );
+    assert_eq!(
+        client
+            .prepend(PrependRequest {
+                namespace: namespace.clone(),
+                key: "log".to_string(),
+                value: b"head-".to_vec(),
+                ttl_seconds: 0,
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .length,
+        9
+    );
+    let log = client
+        .get(GetCacheRequest {
+            namespace: namespace.clone(),
+            key: "log".to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(log.value, b"head-tail");
+
+    client
+        .set(SetCacheRequest {
+            namespace: namespace.clone(),
+            key: "not_numeric".to_string(),
+            value: b"abc".to_vec(),
+            ttl_seconds: 0,
+        })
+        .await
+        .unwrap();
+    let err = client
+        .increment(IncrementRequest {
+            namespace,
+            key: "not_numeric".to_string(),
+            delta: 1,
+            ttl_seconds: 0,
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), Code::InvalidArgument);
+}
+
+#[tokio::test]
 async fn mq_grpc_send_read_ack() {
     let Some(endpoint) = spawn_server(true, true).await else {
         eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
@@ -184,6 +447,269 @@ async fn mq_grpc_send_read_ack() {
         .unwrap()
         .into_inner();
     assert!(ack.success);
+}
+
+#[tokio::test]
+async fn mq_grpc_dead_letter_queue_round_trip() {
+    let Some(endpoint) = spawn_server_with_env(
+        true,
+        true,
+        HashMap::from([("PGAPP_MAX_REDELIVERY_COUNT".to_string(), "2".to_string())]),
+    )
+    .await
+    else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut client = MqServiceClient::connect(endpoint).await.unwrap();
+    let queue = unique("grpc_dlq_orders");
+    client
+        .create_queue(CreateQueueRequest {
+            queue_name: queue.clone(),
+            storage_mode: QueueStorageMode::Durable as i32,
+        })
+        .await
+        .unwrap();
+    let sent = client
+        .send(SendMessageRequest {
+            queue_name: queue.clone(),
+            json_payload: r#"{"poison":true}"#.to_string(),
+            delay_seconds: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    let first = client
+        .read(ReadMessagesRequest {
+            queue_name: queue.clone(),
+            quantity: 1,
+            visibility_timeout_seconds: 30,
+        })
+        .await
+        .unwrap()
+        .into_inner()
+        .messages
+        .remove(0);
+    client
+        .set_visibility_timeout(SetVisibilityTimeoutRequest {
+            queue_name: queue.clone(),
+            message_id: first.message_id,
+            ack_token: first.ack_token,
+            visibility_timeout_seconds: 0,
+        })
+        .await
+        .unwrap();
+    let second = client
+        .read(ReadMessagesRequest {
+            queue_name: queue.clone(),
+            quantity: 1,
+            visibility_timeout_seconds: 30,
+        })
+        .await
+        .unwrap()
+        .into_inner()
+        .messages
+        .remove(0);
+    assert_eq!(second.read_count, 2);
+    client
+        .set_visibility_timeout(SetVisibilityTimeoutRequest {
+            queue_name: queue.clone(),
+            message_id: second.message_id,
+            ack_token: second.ack_token,
+            visibility_timeout_seconds: 0,
+        })
+        .await
+        .unwrap();
+
+    let third = client
+        .read(ReadMessagesRequest {
+            queue_name: queue.clone(),
+            quantity: 1,
+            visibility_timeout_seconds: 30,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(third.messages.is_empty());
+
+    let dlq = client
+        .list_dlq_messages(ListDlqMessagesRequest {
+            queue_name: queue.clone(),
+            limit: 10,
+            offset: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(dlq.messages.len(), 1);
+    assert_eq!(dlq.messages[0].original_message_id, sent.message_id);
+    assert!(dlq.messages[0].json_payload.contains("poison"));
+
+    let fetched = client
+        .get_dlq_message(GetDlqMessageRequest {
+            queue_name: queue.clone(),
+            original_message_id: sent.message_id,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(fetched.original_message_id, sent.message_id);
+    assert!(
+        client
+            .metrics(QueueMetricsRequest {
+                queue_name: queue.clone()
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .dlq_message_count
+            >= 1
+    );
+
+    let reprocessed = client
+        .reprocess_dlq_message(ReprocessDlqMessageRequest {
+            queue_name: queue.clone(),
+            original_message_id: sent.message_id,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(reprocessed.success);
+    let read = client
+        .read(ReadMessagesRequest {
+            queue_name: queue,
+            quantity: 1,
+            visibility_timeout_seconds: 30,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(read.messages[0].message_id, sent.message_id);
+    assert_eq!(read.messages[0].read_count, 1);
+}
+
+#[tokio::test]
+async fn mq_stream_read_delivers_existing_and_future_messages() {
+    let Some(endpoint) = spawn_server(true, true).await else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut producer = MqServiceClient::connect(endpoint.clone()).await.unwrap();
+    let queue = unique("grpc_stream_orders");
+    producer
+        .create_queue(CreateQueueRequest {
+            queue_name: queue.clone(),
+            storage_mode: QueueStorageMode::Durable as i32,
+        })
+        .await
+        .unwrap();
+    let first = producer
+        .send(SendMessageRequest {
+            queue_name: queue.clone(),
+            json_payload: r#"{"stream":1}"#.to_string(),
+            delay_seconds: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    let mut consumer = MqServiceClient::connect(endpoint.clone()).await.unwrap();
+    let mut stream = consumer
+        .stream_read(StreamReadRequest {
+            queue_name: queue.clone(),
+            quantity: 1,
+            visibility_timeout_seconds: 30,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    let existing = tokio::time::timeout(std::time::Duration::from_secs(2), stream.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(existing.messages.len(), 1);
+    assert_eq!(existing.messages[0].message_id, first.message_id);
+    drop(stream);
+
+    let mut live_consumer = MqServiceClient::connect(endpoint.clone()).await.unwrap();
+    let mut live_stream = live_consumer
+        .stream_read(StreamReadRequest {
+            queue_name: queue.clone(),
+            quantity: 1,
+            visibility_timeout_seconds: 30,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    let second = producer
+        .send(SendMessageRequest {
+            queue_name: queue,
+            json_payload: r#"{"stream":2}"#.to_string(),
+            delay_seconds: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    let pushed = tokio::time::timeout(std::time::Duration::from_secs(2), live_stream.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(pushed.messages.len(), 1);
+    assert_eq!(pushed.messages[0].message_id, second.message_id);
+}
+
+#[tokio::test]
+async fn mq_read_with_poll_wakes_when_message_is_sent() {
+    let Some(endpoint) = spawn_server(true, true).await else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut producer = MqServiceClient::connect(endpoint.clone()).await.unwrap();
+    let queue = unique("grpc_poll_notify_orders");
+    producer
+        .create_queue(CreateQueueRequest {
+            queue_name: queue.clone(),
+            storage_mode: QueueStorageMode::Durable as i32,
+        })
+        .await
+        .unwrap();
+
+    let poll_endpoint = endpoint.clone();
+    let poll_queue = queue.clone();
+    let poll = tokio::spawn(async move {
+        let mut consumer = MqServiceClient::connect(poll_endpoint).await.unwrap();
+        consumer
+            .read_with_poll(pgapp_proto::pgapp::v1::ReadWithPollRequest {
+                queue_name: poll_queue,
+                quantity: 1,
+                visibility_timeout_seconds: 30,
+                max_poll_seconds: 10,
+                poll_interval_millis: 5_000,
+            })
+            .await
+            .unwrap()
+            .into_inner()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let sent = producer
+        .send(SendMessageRequest {
+            queue_name: queue,
+            json_payload: r#"{"poll":true}"#.to_string(),
+            delay_seconds: 0,
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    let response = tokio::time::timeout(std::time::Duration::from_secs(2), poll)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(response.messages.len(), 1);
+    assert_eq!(response.messages[0].message_id, sent.message_id);
 }
 
 #[tokio::test]
@@ -268,6 +794,82 @@ async fn config_grpc_publish_read_and_watch() {
                 && metric.status == "ok"
                 && metric.count >= 1)
     );
+}
+
+#[tokio::test]
+async fn config_grpc_schema_validation_round_trip() {
+    let Some(endpoint) = spawn_server(true, true).await else {
+        eprintln!("skipping gRPC integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let mut client = ConfigServiceClient::connect(endpoint).await.unwrap();
+    let scope = ConfigScope {
+        app_id: unique("grpc_schema_config"),
+        environment: "prod".to_string(),
+        cluster: "default".to_string(),
+        namespace: "application".to_string(),
+    };
+    let schema =
+        r#"{"type":"object","required":["port"],"properties":{"port":{"type":"integer"}}}"#;
+
+    client
+        .set_schema(SetConfigSchemaRequest {
+            scope: Some(scope.clone()),
+            json_schema: schema.to_string(),
+        })
+        .await
+        .unwrap();
+    let fetched = client
+        .get_schema(GetConfigSchemaRequest {
+            scope: Some(scope.clone()),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(fetched.has_schema);
+    assert!(fetched.json_schema.contains("port"));
+
+    let invalid = client
+        .upsert_item(UpsertConfigItemRequest {
+            scope: Some(scope.clone()),
+            key: "db".to_string(),
+            json_value: r#"{"port":"5432"}"#.to_string(),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(invalid.code(), Code::InvalidArgument);
+
+    client
+        .upsert_item(UpsertConfigItemRequest {
+            scope: Some(scope.clone()),
+            key: "db".to_string(),
+            json_value: r#"{"port":5432}"#.to_string(),
+        })
+        .await
+        .unwrap();
+
+    let bad_schema = client
+        .set_schema(SetConfigSchemaRequest {
+            scope: Some(scope.clone()),
+            json_schema: r#"{"type":7}"#.to_string(),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(bad_schema.code(), Code::InvalidArgument);
+
+    client
+        .set_schema(SetConfigSchemaRequest {
+            scope: Some(scope.clone()),
+            json_schema: String::new(),
+        })
+        .await
+        .unwrap();
+    let removed = client
+        .get_schema(GetConfigSchemaRequest { scope: Some(scope) })
+        .await
+        .unwrap()
+        .into_inner();
+    assert!(!removed.has_schema);
 }
 
 #[tokio::test]

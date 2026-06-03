@@ -6,7 +6,9 @@ cd "$ROOT"
 
 PYTHON_BIN=${PYTHON_BIN:-}
 if [ -z "$PYTHON_BIN" ]; then
-  if [ -x "$ROOT/.venv/bin/python" ]; then
+  if [ -x "$ROOT/sdk/python/.venv/bin/python" ]; then
+    PYTHON_BIN="$ROOT/sdk/python/.venv/bin/python"
+  elif [ -x "$ROOT/.venv/bin/python" ]; then
     PYTHON_BIN="$ROOT/.venv/bin/python"
   elif [ -x "/opt/homebrew/bin/python3" ]; then
     PYTHON_BIN="/opt/homebrew/bin/python3"

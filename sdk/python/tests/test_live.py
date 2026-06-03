@@ -71,6 +71,26 @@ class LivePythonSDKTests(unittest.TestCase):
         self.assertTrue(self.client.mq.purge_queue(queue))
         self.assertTrue(self.client.mq.drop_queue(queue))
 
+    def test_phase_two_cache_mq_and_stream_surface(self) -> None:
+        suffix = time.time_ns()
+        namespace = f"py_sdk_phase_two_cache_{suffix}"
+        queue = f"py_sdk_phase_two_orders_{suffix}"
+
+        self.assertEqual(self.client.cache.increment(namespace, "counter", 2, ttl_seconds=60), 2)
+        self.assertEqual(self.client.cache.decrement(namespace, "counter", 1), 1)
+        self.assertTrue(self.client.cache.set_nx(namespace, "lock", b"first", ttl_seconds=60))
+        self.assertFalse(self.client.cache.set_nx(namespace, "lock", b"second", ttl_seconds=60))
+        self.assertIsNone(self.client.cache.get_set(namespace, "slot", b"new", ttl_seconds=60))
+        self.assertEqual(self.client.cache.get_set(namespace, "slot", b"newer"), b"new")
+        self.assertEqual(self.client.cache.append(namespace, "log", b"tail"), 4)
+        self.assertEqual(self.client.cache.prepend(namespace, "log", b"head-"), 9)
+
+        self.assertTrue(self.client.mq.create_queue(queue))
+        self.assertEqual(self.client.mq.list_dlq_messages(queue), [])
+        message_id = self.client.mq.send_json(queue, {"stream": True})
+        streamed = next(self.client.mq.stream_read(queue, quantity=1, visibility_timeout_seconds=30))
+        self.assertEqual(streamed.message_id, message_id)
+
     def test_config_read_and_watch(self) -> None:
         suffix = time.time_ns()
         scope = self.client.config.scope(

@@ -70,6 +70,36 @@ class CacheServiceStub(object):
                 request_serializer=pgapp_dot_v1_dot_cache__pb2.CacheStatsRequest.SerializeToString,
                 response_deserializer=pgapp_dot_v1_dot_cache__pb2.CacheStatsResponse.FromString,
                 _registered_method=True)
+        self.Increment = channel.unary_unary(
+                '/pgapp.v1.CacheService/Increment',
+                request_serializer=pgapp_dot_v1_dot_cache__pb2.IncrementRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_cache__pb2.IncrementResponse.FromString,
+                _registered_method=True)
+        self.Decrement = channel.unary_unary(
+                '/pgapp.v1.CacheService/Decrement',
+                request_serializer=pgapp_dot_v1_dot_cache__pb2.DecrementRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_cache__pb2.DecrementResponse.FromString,
+                _registered_method=True)
+        self.SetNX = channel.unary_unary(
+                '/pgapp.v1.CacheService/SetNX',
+                request_serializer=pgapp_dot_v1_dot_cache__pb2.SetNXRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_cache__pb2.SetNXResponse.FromString,
+                _registered_method=True)
+        self.GetSet = channel.unary_unary(
+                '/pgapp.v1.CacheService/GetSet',
+                request_serializer=pgapp_dot_v1_dot_cache__pb2.GetSetRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_cache__pb2.GetSetResponse.FromString,
+                _registered_method=True)
+        self.Append = channel.unary_unary(
+                '/pgapp.v1.CacheService/Append',
+                request_serializer=pgapp_dot_v1_dot_cache__pb2.AppendRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_cache__pb2.AppendResponse.FromString,
+                _registered_method=True)
+        self.Prepend = channel.unary_unary(
+                '/pgapp.v1.CacheService/Prepend',
+                request_serializer=pgapp_dot_v1_dot_cache__pb2.PrependRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_cache__pb2.PrependResponse.FromString,
+                _registered_method=True)
 
 
 class CacheServiceServicer(object):
@@ -117,6 +147,42 @@ class CacheServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Increment(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Decrement(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetNX(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetSet(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Append(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Prepend(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CacheServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -154,6 +220,36 @@ def add_CacheServiceServicer_to_server(servicer, server):
                     servicer.Stats,
                     request_deserializer=pgapp_dot_v1_dot_cache__pb2.CacheStatsRequest.FromString,
                     response_serializer=pgapp_dot_v1_dot_cache__pb2.CacheStatsResponse.SerializeToString,
+            ),
+            'Increment': grpc.unary_unary_rpc_method_handler(
+                    servicer.Increment,
+                    request_deserializer=pgapp_dot_v1_dot_cache__pb2.IncrementRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_cache__pb2.IncrementResponse.SerializeToString,
+            ),
+            'Decrement': grpc.unary_unary_rpc_method_handler(
+                    servicer.Decrement,
+                    request_deserializer=pgapp_dot_v1_dot_cache__pb2.DecrementRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_cache__pb2.DecrementResponse.SerializeToString,
+            ),
+            'SetNX': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetNX,
+                    request_deserializer=pgapp_dot_v1_dot_cache__pb2.SetNXRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_cache__pb2.SetNXResponse.SerializeToString,
+            ),
+            'GetSet': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetSet,
+                    request_deserializer=pgapp_dot_v1_dot_cache__pb2.GetSetRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_cache__pb2.GetSetResponse.SerializeToString,
+            ),
+            'Append': grpc.unary_unary_rpc_method_handler(
+                    servicer.Append,
+                    request_deserializer=pgapp_dot_v1_dot_cache__pb2.AppendRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_cache__pb2.AppendResponse.SerializeToString,
+            ),
+            'Prepend': grpc.unary_unary_rpc_method_handler(
+                    servicer.Prepend,
+                    request_deserializer=pgapp_dot_v1_dot_cache__pb2.PrependRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_cache__pb2.PrependResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -345,6 +441,168 @@ class CacheService(object):
             '/pgapp.v1.CacheService/Stats',
             pgapp_dot_v1_dot_cache__pb2.CacheStatsRequest.SerializeToString,
             pgapp_dot_v1_dot_cache__pb2.CacheStatsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Increment(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.CacheService/Increment',
+            pgapp_dot_v1_dot_cache__pb2.IncrementRequest.SerializeToString,
+            pgapp_dot_v1_dot_cache__pb2.IncrementResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Decrement(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.CacheService/Decrement',
+            pgapp_dot_v1_dot_cache__pb2.DecrementRequest.SerializeToString,
+            pgapp_dot_v1_dot_cache__pb2.DecrementResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetNX(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.CacheService/SetNX',
+            pgapp_dot_v1_dot_cache__pb2.SetNXRequest.SerializeToString,
+            pgapp_dot_v1_dot_cache__pb2.SetNXResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetSet(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.CacheService/GetSet',
+            pgapp_dot_v1_dot_cache__pb2.GetSetRequest.SerializeToString,
+            pgapp_dot_v1_dot_cache__pb2.GetSetResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Append(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.CacheService/Append',
+            pgapp_dot_v1_dot_cache__pb2.AppendRequest.SerializeToString,
+            pgapp_dot_v1_dot_cache__pb2.AppendResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Prepend(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.CacheService/Prepend',
+            pgapp_dot_v1_dot_cache__pb2.PrependRequest.SerializeToString,
+            pgapp_dot_v1_dot_cache__pb2.PrependResponse.FromString,
             options,
             channel_credentials,
             insecure,

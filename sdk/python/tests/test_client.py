@@ -12,6 +12,15 @@ class ClientTests(unittest.TestCase):
         self.assertIs(client.mq.client, client)
         self.assertIs(client.config.client, client)
 
+    def test_client_auth_metadata_requires_key_and_secret(self) -> None:
+        client = PGAppClient("http://127.0.0.1:50051", key="svc", secret="top-secret")
+        self.assertEqual(
+            client.metadata,
+            (("x-pgapp-key", "svc"), ("x-pgapp-secret", "top-secret")),
+        )
+        with self.assertRaises(PGAppError):
+            PGAppClient(key="svc")
+
     def test_cache_bytes_are_preserved(self) -> None:
         client = PGAppClient()
         self.assertEqual(client.cache.encode_value(b"abc"), b"abc")
@@ -32,6 +41,26 @@ class ClientTests(unittest.TestCase):
         with self.assertRaises(PGAppError) as raised:
             client.cache.encode_value(object())
         self.assertEqual(raised.exception.status_code, "invalid_argument")
+
+    def test_phase_two_methods_are_exposed(self) -> None:
+        client = PGAppClient()
+        for name in (
+            "increment",
+            "decrement",
+            "set_nx",
+            "get_set",
+            "append",
+            "prepend",
+        ):
+            self.assertTrue(callable(getattr(client.cache, name)))
+        for name in (
+            "list_dlq_messages",
+            "get_dlq_message",
+            "reprocess_dlq_message",
+            "purge_dlq",
+            "stream_read",
+        ):
+            self.assertTrue(callable(getattr(client.mq, name)))
 
 
 if __name__ == "__main__":

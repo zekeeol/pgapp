@@ -18,6 +18,11 @@ service MQService {
   rpc Archive(ArchiveMessageRequest) returns (OperationResult);
   rpc SetVisibilityTimeout(SetVisibilityTimeoutRequest) returns (OperationResult);
   rpc Metrics(QueueMetricsRequest) returns (QueueMetricsResponse);
+  rpc ListDlqMessages(ListDlqMessagesRequest) returns (ListDlqMessagesResponse);
+  rpc GetDlqMessage(GetDlqMessageRequest) returns (DlqMessage);
+  rpc ReprocessDlqMessage(ReprocessDlqMessageRequest) returns (OperationResult);
+  rpc PurgeDlq(PurgeDlqRequest) returns (OperationResult);
+  rpc StreamRead(StreamReadRequest) returns (stream ReadMessagesResponse);
 }
 
 enum QueueStorageMode {
@@ -73,6 +78,12 @@ message ReadWithPollRequest {
   int64 poll_interval_millis = 5;
 }
 
+message StreamReadRequest {
+  string queue_name = 1;
+  int32 quantity = 2;
+  int64 visibility_timeout_seconds = 3;
+}
+
 message QueueMessage {
   int64 message_id = 1;
   int32 read_count = 2;
@@ -114,4 +125,40 @@ message QueueMetricsResponse {
   int64 in_flight_message_count = 2;
   int64 oldest_visible_message_age_seconds = 3;
   int64 archived_message_count = 4;
+  int64 dlq_message_count = 5;
+}
+
+message DlqMessage {
+  int64 id = 1;
+  int64 original_message_id = 2;
+  int32 read_count = 3;
+  string enqueued_at = 4;
+  string dead_lettered_at = 5;
+  string json_payload = 6;
+  string reason = 7;
+}
+
+message ListDlqMessagesRequest {
+  string queue_name = 1;
+  int32 limit = 2;
+  int64 offset = 3;
+}
+
+message ListDlqMessagesResponse {
+  repeated DlqMessage messages = 1;
+  int64 next_offset = 2;
+}
+
+message GetDlqMessageRequest {
+  string queue_name = 1;
+  int64 original_message_id = 2;
+}
+
+message ReprocessDlqMessageRequest {
+  string queue_name = 1;
+  int64 original_message_id = 2;
+}
+
+message PurgeDlqRequest {
+  string queue_name = 1;
 }

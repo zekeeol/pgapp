@@ -9,13 +9,20 @@ This change is implemented with a red-green-refactor loop.
 Test layers:
 
 - Rust unit tests: validation, configuration, errors, metrics, and pure domain helpers.
-- Database integration tests: cache schema, MQ schema, cache behavior, queue visibility, token-scoped ack, archive, redelivery, and concurrent reads. These run when `DATABASE_URL` points to a PostgreSQL database.
-- Server integration tests: gRPC method behavior, health, readiness, and error mapping.
-- SDK tests: Rust, Go, and Python client shape and conformance.
-- End-to-end smoke tests: PostgreSQL plus the Rust server plus SDK calls.
+- Database integration tests: Cache schema, MQ schema, Config Center schema, cache behavior, queue visibility, token-scoped ack, archive, redelivery, DLQ movement, auth storage, and concurrent reads. These run when `DATABASE_URL` points to a PostgreSQL database.
+- Server integration tests: gRPC method behavior, health, readiness, auth metadata, Admin HTTP auth, read-only Admin Cache/MQ views, and error mapping.
+- Admin UI tests: React component and route behavior with mocked Admin HTTP responses.
+- SDK tests: Rust, Go, Python, and TypeScript client shape and conformance.
+- End-to-end smoke tests: PostgreSQL plus the Rust server plus SDK calls, including Docker-backed local deployment flows.
 
 Run everything available locally:
 
 ```sh
 scripts/check.sh
+```
+
+Run the Docker-backed integration suite:
+
+```sh
+scripts/integration.sh
 ```

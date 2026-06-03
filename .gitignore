@@ -1,6 +1,10 @@
 /target/
 /.env
 /.venv/
+.venv/
+/build/
+build/
+*.egg-info/
 /.codex/
 *.log
 __pycache__/

@@ -90,6 +90,31 @@ class MQServiceStub(object):
                 request_serializer=pgapp_dot_v1_dot_mq__pb2.QueueMetricsRequest.SerializeToString,
                 response_deserializer=pgapp_dot_v1_dot_mq__pb2.QueueMetricsResponse.FromString,
                 _registered_method=True)
+        self.ListDlqMessages = channel.unary_unary(
+                '/pgapp.v1.MQService/ListDlqMessages',
+                request_serializer=pgapp_dot_v1_dot_mq__pb2.ListDlqMessagesRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_mq__pb2.ListDlqMessagesResponse.FromString,
+                _registered_method=True)
+        self.GetDlqMessage = channel.unary_unary(
+                '/pgapp.v1.MQService/GetDlqMessage',
+                request_serializer=pgapp_dot_v1_dot_mq__pb2.GetDlqMessageRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_mq__pb2.DlqMessage.FromString,
+                _registered_method=True)
+        self.ReprocessDlqMessage = channel.unary_unary(
+                '/pgapp.v1.MQService/ReprocessDlqMessage',
+                request_serializer=pgapp_dot_v1_dot_mq__pb2.ReprocessDlqMessageRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
+                _registered_method=True)
+        self.PurgeDlq = channel.unary_unary(
+                '/pgapp.v1.MQService/PurgeDlq',
+                request_serializer=pgapp_dot_v1_dot_mq__pb2.PurgeDlqRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
+                _registered_method=True)
+        self.StreamRead = channel.unary_stream(
+                '/pgapp.v1.MQService/StreamRead',
+                request_serializer=pgapp_dot_v1_dot_mq__pb2.StreamReadRequest.SerializeToString,
+                response_deserializer=pgapp_dot_v1_dot_mq__pb2.ReadMessagesResponse.FromString,
+                _registered_method=True)
 
 
 class MQServiceServicer(object):
@@ -161,6 +186,36 @@ class MQServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListDlqMessages(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetDlqMessage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReprocessDlqMessage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PurgeDlq(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StreamRead(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MQServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -218,6 +273,31 @@ def add_MQServiceServicer_to_server(servicer, server):
                     servicer.Metrics,
                     request_deserializer=pgapp_dot_v1_dot_mq__pb2.QueueMetricsRequest.FromString,
                     response_serializer=pgapp_dot_v1_dot_mq__pb2.QueueMetricsResponse.SerializeToString,
+            ),
+            'ListDlqMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDlqMessages,
+                    request_deserializer=pgapp_dot_v1_dot_mq__pb2.ListDlqMessagesRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_mq__pb2.ListDlqMessagesResponse.SerializeToString,
+            ),
+            'GetDlqMessage': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDlqMessage,
+                    request_deserializer=pgapp_dot_v1_dot_mq__pb2.GetDlqMessageRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_mq__pb2.DlqMessage.SerializeToString,
+            ),
+            'ReprocessDlqMessage': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReprocessDlqMessage,
+                    request_deserializer=pgapp_dot_v1_dot_mq__pb2.ReprocessDlqMessageRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_common__pb2.OperationResult.SerializeToString,
+            ),
+            'PurgeDlq': grpc.unary_unary_rpc_method_handler(
+                    servicer.PurgeDlq,
+                    request_deserializer=pgapp_dot_v1_dot_mq__pb2.PurgeDlqRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_common__pb2.OperationResult.SerializeToString,
+            ),
+            'StreamRead': grpc.unary_stream_rpc_method_handler(
+                    servicer.StreamRead,
+                    request_deserializer=pgapp_dot_v1_dot_mq__pb2.StreamReadRequest.FromString,
+                    response_serializer=pgapp_dot_v1_dot_mq__pb2.ReadMessagesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -517,6 +597,141 @@ class MQService(object):
             '/pgapp.v1.MQService/Metrics',
             pgapp_dot_v1_dot_mq__pb2.QueueMetricsRequest.SerializeToString,
             pgapp_dot_v1_dot_mq__pb2.QueueMetricsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListDlqMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.MQService/ListDlqMessages',
+            pgapp_dot_v1_dot_mq__pb2.ListDlqMessagesRequest.SerializeToString,
+            pgapp_dot_v1_dot_mq__pb2.ListDlqMessagesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDlqMessage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.MQService/GetDlqMessage',
+            pgapp_dot_v1_dot_mq__pb2.GetDlqMessageRequest.SerializeToString,
+            pgapp_dot_v1_dot_mq__pb2.DlqMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReprocessDlqMessage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.MQService/ReprocessDlqMessage',
+            pgapp_dot_v1_dot_mq__pb2.ReprocessDlqMessageRequest.SerializeToString,
+            pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PurgeDlq(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/pgapp.v1.MQService/PurgeDlq',
+            pgapp_dot_v1_dot_mq__pb2.PurgeDlqRequest.SerializeToString,
+            pgapp_dot_v1_dot_common__pb2.OperationResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StreamRead(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/pgapp.v1.MQService/StreamRead',
+            pgapp_dot_v1_dot_mq__pb2.StreamReadRequest.SerializeToString,
+            pgapp_dot_v1_dot_mq__pb2.ReadMessagesResponse.FromString,
             options,
             channel_credentials,
             insecure,

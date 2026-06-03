@@ -26,6 +26,12 @@ const (
 	CacheService_Exists_FullMethodName              = "/pgapp.v1.CacheService/Exists"
 	CacheService_InvalidateNamespace_FullMethodName = "/pgapp.v1.CacheService/InvalidateNamespace"
 	CacheService_Stats_FullMethodName               = "/pgapp.v1.CacheService/Stats"
+	CacheService_Increment_FullMethodName           = "/pgapp.v1.CacheService/Increment"
+	CacheService_Decrement_FullMethodName           = "/pgapp.v1.CacheService/Decrement"
+	CacheService_SetNX_FullMethodName               = "/pgapp.v1.CacheService/SetNX"
+	CacheService_GetSet_FullMethodName              = "/pgapp.v1.CacheService/GetSet"
+	CacheService_Append_FullMethodName              = "/pgapp.v1.CacheService/Append"
+	CacheService_Prepend_FullMethodName             = "/pgapp.v1.CacheService/Prepend"
 )
 
 // CacheServiceClient is the client API for CacheService service.
@@ -39,6 +45,12 @@ type CacheServiceClient interface {
 	Exists(ctx context.Context, in *ExistsCacheRequest, opts ...grpc.CallOption) (*ExistsCacheResponse, error)
 	InvalidateNamespace(ctx context.Context, in *InvalidateNamespaceRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	Stats(ctx context.Context, in *CacheStatsRequest, opts ...grpc.CallOption) (*CacheStatsResponse, error)
+	Increment(ctx context.Context, in *IncrementRequest, opts ...grpc.CallOption) (*IncrementResponse, error)
+	Decrement(ctx context.Context, in *DecrementRequest, opts ...grpc.CallOption) (*DecrementResponse, error)
+	SetNX(ctx context.Context, in *SetNXRequest, opts ...grpc.CallOption) (*SetNXResponse, error)
+	GetSet(ctx context.Context, in *GetSetRequest, opts ...grpc.CallOption) (*GetSetResponse, error)
+	Append(ctx context.Context, in *AppendRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	Prepend(ctx context.Context, in *PrependRequest, opts ...grpc.CallOption) (*PrependResponse, error)
 }
 
 type cacheServiceClient struct {
@@ -119,6 +131,66 @@ func (c *cacheServiceClient) Stats(ctx context.Context, in *CacheStatsRequest, o
 	return out, nil
 }
 
+func (c *cacheServiceClient) Increment(ctx context.Context, in *IncrementRequest, opts ...grpc.CallOption) (*IncrementResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IncrementResponse)
+	err := c.cc.Invoke(ctx, CacheService_Increment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *cacheServiceClient) Decrement(ctx context.Context, in *DecrementRequest, opts ...grpc.CallOption) (*DecrementResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DecrementResponse)
+	err := c.cc.Invoke(ctx, CacheService_Decrement_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *cacheServiceClient) SetNX(ctx context.Context, in *SetNXRequest, opts ...grpc.CallOption) (*SetNXResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetNXResponse)
+	err := c.cc.Invoke(ctx, CacheService_SetNX_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *cacheServiceClient) GetSet(ctx context.Context, in *GetSetRequest, opts ...grpc.CallOption) (*GetSetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSetResponse)
+	err := c.cc.Invoke(ctx, CacheService_GetSet_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *cacheServiceClient) Append(ctx context.Context, in *AppendRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AppendResponse)
+	err := c.cc.Invoke(ctx, CacheService_Append_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *cacheServiceClient) Prepend(ctx context.Context, in *PrependRequest, opts ...grpc.CallOption) (*PrependResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrependResponse)
+	err := c.cc.Invoke(ctx, CacheService_Prepend_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CacheServiceServer is the server API for CacheService service.
 // All implementations must embed UnimplementedCacheServiceServer
 // for forward compatibility.
@@ -130,6 +202,12 @@ type CacheServiceServer interface {
 	Exists(context.Context, *ExistsCacheRequest) (*ExistsCacheResponse, error)
 	InvalidateNamespace(context.Context, *InvalidateNamespaceRequest) (*OperationResult, error)
 	Stats(context.Context, *CacheStatsRequest) (*CacheStatsResponse, error)
+	Increment(context.Context, *IncrementRequest) (*IncrementResponse, error)
+	Decrement(context.Context, *DecrementRequest) (*DecrementResponse, error)
+	SetNX(context.Context, *SetNXRequest) (*SetNXResponse, error)
+	GetSet(context.Context, *GetSetRequest) (*GetSetResponse, error)
+	Append(context.Context, *AppendRequest) (*AppendResponse, error)
+	Prepend(context.Context, *PrependRequest) (*PrependResponse, error)
 	mustEmbedUnimplementedCacheServiceServer()
 }
 
@@ -160,6 +238,24 @@ func (UnimplementedCacheServiceServer) InvalidateNamespace(context.Context, *Inv
 }
 func (UnimplementedCacheServiceServer) Stats(context.Context, *CacheStatsRequest) (*CacheStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Stats not implemented")
+}
+func (UnimplementedCacheServiceServer) Increment(context.Context, *IncrementRequest) (*IncrementResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Increment not implemented")
+}
+func (UnimplementedCacheServiceServer) Decrement(context.Context, *DecrementRequest) (*DecrementResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Decrement not implemented")
+}
+func (UnimplementedCacheServiceServer) SetNX(context.Context, *SetNXRequest) (*SetNXResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetNX not implemented")
+}
+func (UnimplementedCacheServiceServer) GetSet(context.Context, *GetSetRequest) (*GetSetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSet not implemented")
+}
+func (UnimplementedCacheServiceServer) Append(context.Context, *AppendRequest) (*AppendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Append not implemented")
+}
+func (UnimplementedCacheServiceServer) Prepend(context.Context, *PrependRequest) (*PrependResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Prepend not implemented")
 }
 func (UnimplementedCacheServiceServer) mustEmbedUnimplementedCacheServiceServer() {}
 func (UnimplementedCacheServiceServer) testEmbeddedByValue()                      {}
@@ -308,6 +404,114 @@ func _CacheService_Stats_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CacheService_Increment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IncrementRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).Increment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_Increment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).Increment(ctx, req.(*IncrementRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CacheService_Decrement_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DecrementRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).Decrement(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_Decrement_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).Decrement(ctx, req.(*DecrementRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CacheService_SetNX_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetNXRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).SetNX(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_SetNX_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).SetNX(ctx, req.(*SetNXRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CacheService_GetSet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).GetSet(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_GetSet_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).GetSet(ctx, req.(*GetSetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CacheService_Append_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).Append(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_Append_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).Append(ctx, req.(*AppendRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CacheService_Prepend_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrependRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CacheServiceServer).Prepend(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CacheService_Prepend_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CacheServiceServer).Prepend(ctx, req.(*PrependRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CacheService_ServiceDesc is the grpc.ServiceDesc for CacheService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -342,6 +546,30 @@ var CacheService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Stats",
 			Handler:    _CacheService_Stats_Handler,
+		},
+		{
+			MethodName: "Increment",
+			Handler:    _CacheService_Increment_Handler,
+		},
+		{
+			MethodName: "Decrement",
+			Handler:    _CacheService_Decrement_Handler,
+		},
+		{
+			MethodName: "SetNX",
+			Handler:    _CacheService_SetNX_Handler,
+		},
+		{
+			MethodName: "GetSet",
+			Handler:    _CacheService_GetSet_Handler,
+		},
+		{
+			MethodName: "Append",
+			Handler:    _CacheService_Append_Handler,
+		},
+		{
+			MethodName: "Prepend",
+			Handler:    _CacheService_Prepend_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

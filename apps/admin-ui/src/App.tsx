@@ -6,6 +6,7 @@ import {
   FileText,
   LayoutDashboard,
   MessageSquareText,
+  RefreshCcw,
   Rocket,
   Save,
   Search,
@@ -87,6 +88,16 @@ type QueueMessage = {
   payload_preview: string;
 };
 
+type DlqMessage = {
+  id: number;
+  original_message_id: number;
+  read_count: number;
+  enqueued_at: string;
+  dead_lettered_at: string;
+  payload: unknown;
+  reason: string;
+};
+
 type LogEvent = {
   id: number;
   level: string;
@@ -95,7 +106,17 @@ type LogEvent = {
   request_id?: string;
 };
 
+type ClientCredential = {
+  id: number;
+  client_key: string;
+  active: boolean;
+  roles: string[];
+  created_at: string;
+  updated_at: string;
+};
+
 type ClientActivity = {
+  items: ClientCredential[];
   admin_sessions: Array<{ request_id: string; path: string; last_seen_at: string }>;
   api_activity: MethodMetric[];
 };
@@ -132,6 +153,19 @@ type ConfigRelease = {
   message: string;
   published_by: string;
   published_at: string;
+};
+
+type ConfigSchemaResponse = {
+  scope: ConfigScope;
+  has_schema: boolean;
+  schema: unknown | null;
+};
+
+type CreatedClient = {
+  id: number;
+  client_key: string;
+  secret: string;
+  roles: string[];
 };
 
 type LoadState<T> =
@@ -179,6 +213,14 @@ async function sendJson<T>(path: string, method: "PUT" | "POST", body: unknown):
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
+}
+
+async function postAction<T>(path: string): Promise<T> {
+  return fetchJson<T>(path, { method: "POST" });
+}
+
+async function deleteAction<T>(path: string): Promise<T> {
+  return fetchJson<T>(path, { method: "DELETE" });
 }
 
 function useAsyncData<T>(
@@ -425,6 +467,7 @@ function CacheView(): ReactElement {
 function MqView(): ReactElement {
   const queues = useAsyncData<Page<QueueSummary>>(() => fetchJson("/api/admin/mq/queues?limit=50&offset=0"), []);
   const selectedQueue = queues.status === "ready" ? queues.data.items[0]?.name : undefined;
+  const [feedback, setFeedback] = useState<string>("");
   const messages = useAsyncData<Page<QueueMessage>>(
     () => {
       if (!selectedQueue) {
@@ -434,30 +477,103 @@ function MqView(): ReactElement {
     },
     [selectedQueue]
   );
+  const dlq = useAsyncData<Page<DlqMessage>>(
+    () => {
+      if (!selectedQueue) {
+        return Promise.resolve({ items: [], limit: 50, offset: 0, next_offset: null });
+      }
+      return fetchJson(`/api/admin/mq/queues/${selectedQueue}/dlq?limit=50&offset=0`);
+    },
+    [selectedQueue]
+  );
+
+  async function reprocessDlq(messageId: number): Promise<void> {
+    if (!selectedQueue) {
+      return;
+    }
+    setFeedback("");
+    try {
+      await postAction<{ success: boolean }>(`/api/admin/mq/queues/${selectedQueue}/dlq/${messageId}/reprocess`);
+      setFeedback(`Reprocessed ${messageId}`);
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
+  }
+
+  async function purgeDlq(): Promise<void> {
+    if (!selectedQueue) {
+      return;
+    }
+    setFeedback("");
+    try {
+      const result = await postAction<{ deleted_count: number }>(`/api/admin/mq/queues/${selectedQueue}/dlq/purge`);
+      setFeedback(`Purged ${result.deleted_count}`);
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
+  }
 
   return (
-    <div className="split">
+    <div className="stack">
+      <div className="split">
+        <section className="panel">
+          <div className="panel-heading">
+            <h2>Queues</h2>
+          </div>
+          <AsyncTable
+            state={queues}
+            columns={["queue", "visible", "in-flight", "archived"]}
+            mapRow={(row) => [row.name, row.visible_message_count, row.in_flight_message_count, row.archived_message_count]}
+            empty="No queues"
+          />
+        </section>
+        <section className="panel">
+          <div className="panel-heading">
+            <h2>Messages</h2>
+          </div>
+          <AsyncTable
+            state={messages}
+            columns={["id", "queue", "reads", "payload"]}
+            mapRow={(row) => [row.message_id, row.queue_name, row.read_count, row.payload_preview]}
+            empty="No messages"
+          />
+        </section>
+      </div>
       <section className="panel">
         <div className="panel-heading">
-          <h2>Queues</h2>
+          <h2>Dead letters</h2>
+          {selectedQueue && (
+            <button type="button" className="icon-button" aria-label={`Purge DLQ for ${selectedQueue}`} onClick={() => void purgeDlq()}>
+              <RefreshCcw size={16} />
+              <span>Purge</span>
+            </button>
+          )}
         </div>
-        <AsyncTable
-          state={queues}
-          columns={["queue", "visible", "in-flight", "archived"]}
-          mapRow={(row) => [row.name, row.visible_message_count, row.in_flight_message_count, row.archived_message_count]}
-          empty="No queues"
-        />
-      </section>
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>Messages</h2>
-        </div>
-        <AsyncTable
-          state={messages}
-          columns={["id", "queue", "reads", "payload"]}
-          mapRow={(row) => [row.message_id, row.queue_name, row.read_count, row.payload_preview]}
-          empty="No messages"
-        />
+        {dlq.status === "ready" ? (
+          <DataTable
+            columns={["original id", "reads", "reason", "payload", "action"]}
+            rows={dlq.data.items.map((message) => [
+              message.original_message_id,
+              message.read_count,
+              message.reason,
+              compactJson(message.payload),
+              <button
+                key={message.original_message_id}
+                type="button"
+                className="icon-button"
+                aria-label={`Reprocess DLQ message ${message.original_message_id}`}
+                onClick={() => void reprocessDlq(message.original_message_id)}
+              >
+                <RefreshCcw size={16} />
+                <span>Reprocess</span>
+              </button>
+            ])}
+            empty="No dead letters"
+          />
+        ) : (
+          <StateMessage state={dlq} />
+        )}
+        {feedback && <p className={feedback.includes("failed") ? "state error compact panel-feedback" : "state compact panel-feedback"}>{feedback}</p>}
       </section>
     </div>
   );
@@ -546,8 +662,13 @@ function ConfigDetails({ scope }: { scope: ConfigScope }): ReactElement {
     () => fetchJson(`/api/admin/config/releases?${query}`),
     [query]
   );
+  const schema = useAsyncData<ConfigSchemaResponse>(
+    () => fetchJson(`/api/admin/config/schema?${query}`),
+    [query]
+  );
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [jsonValue, setJsonValue] = useState<string>("{\n}");
+  const [schemaValue, setSchemaValue] = useState<string>("{\n}");
   const [feedback, setFeedback] = useState<string>("");
 
   useEffect(() => {
@@ -564,6 +685,13 @@ function ConfigDetails({ scope }: { scope: ConfigScope }): ReactElement {
     setJsonValue(JSON.stringify(first.value, null, 2));
   }, [draft.status === "ready" ? JSON.stringify(draft.data.items) : draft.status]);
 
+  useEffect(() => {
+    if (schema.status !== "ready") {
+      return;
+    }
+    setSchemaValue(schema.data.has_schema ? JSON.stringify(schema.data.schema, null, 2) : "{\n}");
+  }, [schema.status === "ready" ? JSON.stringify(schema.data.schema) : schema.status]);
+
   async function saveItem(): Promise<void> {
     setFeedback("");
     let parsed: unknown;
@@ -577,22 +705,61 @@ function ConfigDetails({ scope }: { scope: ConfigScope }): ReactElement {
       setFeedback("Key required");
       return;
     }
-    await sendJson<{ success: boolean }>("/api/admin/config/items", "PUT", {
-      scope,
-      key: selectedKey.trim(),
-      value: parsed
-    });
-    setFeedback("Draft saved");
+    try {
+      await sendJson<{ success: boolean }>("/api/admin/config/items", "PUT", {
+        scope,
+        key: selectedKey.trim(),
+        value: parsed
+      });
+      setFeedback("Draft saved");
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
+  }
+
+  async function saveSchema(): Promise<void> {
+    setFeedback("");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(schemaValue);
+    } catch {
+      setFeedback("Invalid JSON Schema");
+      return;
+    }
+    try {
+      await sendJson<{ success: boolean }>("/api/admin/config/schema", "PUT", {
+        scope,
+        schema: parsed
+      });
+      setFeedback("Schema saved");
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
+  }
+
+  async function removeSchema(): Promise<void> {
+    setFeedback("");
+    try {
+      await deleteAction<{ success: boolean }>(`/api/admin/config/schema?${query}`);
+      setSchemaValue("{\n}");
+      setFeedback("Schema removed");
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
   }
 
   async function publish(): Promise<void> {
     setFeedback("");
-    await sendJson<ConfigRelease>("/api/admin/config/releases", "POST", {
-      scope,
-      message: "Admin UI publish",
-      published_by: "admin-ui"
-    });
-    setFeedback("Release published");
+    try {
+      await sendJson<ConfigRelease>("/api/admin/config/releases", "POST", {
+        scope,
+        message: "Admin UI publish",
+        published_by: "admin-ui"
+      });
+      setFeedback("Release published");
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
   }
 
   return (
@@ -644,8 +811,39 @@ function ConfigDetails({ scope }: { scope: ConfigScope }): ReactElement {
               spellCheck={false}
             />
           </label>
-          {feedback && <p className={feedback === "Invalid JSON" ? "state error compact" : "state compact"}>{feedback}</p>}
+          {feedback && <p className={feedback.toLowerCase().includes("invalid") || feedback.includes("rejected") ? "state error compact" : "state compact"}>{feedback}</p>}
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>JSON Schema</h2>
+          <div className="toolbar">
+            <button type="button" className="icon-button" aria-label="Save config schema" onClick={() => void saveSchema()}>
+              <Save size={16} />
+              <span>Save</span>
+            </button>
+            <button type="button" className="icon-button" aria-label="Remove config schema" onClick={() => void removeSchema()}>
+              <RefreshCcw size={16} />
+              <span>Remove</span>
+            </button>
+          </div>
+        </div>
+        {schema.status === "ready" ? (
+          <div className="editor-body">
+            <label>
+              <span>Schema</span>
+              <textarea
+                aria-label="Config JSON schema"
+                value={schemaValue}
+                onChange={(event) => setSchemaValue(event.target.value)}
+                spellCheck={false}
+              />
+            </label>
+          </div>
+        ) : (
+          <StateMessage state={schema} />
+        )}
       </section>
 
       <section className="panel">
@@ -691,11 +889,102 @@ function LogsView(): ReactElement {
 
 function ClientsView(): ReactElement {
   const clients = useAsyncData<ClientActivity>(() => fetchJson("/api/admin/clients"), []);
+  const [clientKey, setClientKey] = useState<string>("");
+  const [roles, setRoles] = useState<string>("");
+  const [secret, setSecret] = useState<string>("");
+  const [feedback, setFeedback] = useState<string>("");
   if (clients.status !== "ready") {
     return <StateMessage state={clients} />;
   }
+
+  async function createClient(): Promise<void> {
+    setFeedback("");
+    setSecret("");
+    if (!clientKey.trim()) {
+      setFeedback("Client key required");
+      return;
+    }
+    try {
+      const created = await sendJson<CreatedClient>("/api/admin/clients", "POST", {
+        client_key: clientKey.trim(),
+        roles: roles
+          .split(",")
+          .map((role) => role.trim())
+          .filter(Boolean)
+      });
+      setSecret(created.secret);
+      setFeedback(`Created ${created.client_key}`);
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
+  }
+
+  async function rotateClient(clientKey: string): Promise<void> {
+    setFeedback("");
+    setSecret("");
+    try {
+      const rotated = await postAction<CreatedClient>(`/api/admin/clients/${clientKey}/rotate`);
+      setSecret(rotated.secret);
+      setFeedback(`Rotated ${rotated.client_key}`);
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
+  }
+
+  async function deactivateClient(clientKey: string): Promise<void> {
+    setFeedback("");
+    try {
+      await postAction<{ success: boolean }>(`/api/admin/clients/${clientKey}/deactivate`);
+      setFeedback(`Deactivated ${clientKey}`);
+    } catch (error) {
+      setFeedback(errorMessage(error));
+    }
+  }
+
   return (
-    <div className="split">
+    <div className="stack">
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>Client credentials</h2>
+          <button type="button" className="icon-button primary" aria-label="Create client credential" onClick={() => void createClient()}>
+            <Save size={16} />
+            <span>Create</span>
+          </button>
+        </div>
+        <div className="editor-body client-form">
+          <label>
+            <span>Key</span>
+            <input aria-label="New client key" value={clientKey} onChange={(event) => setClientKey(event.target.value)} />
+          </label>
+          <label>
+            <span>Roles</span>
+            <input aria-label="New client roles" value={roles} onChange={(event) => setRoles(event.target.value)} />
+          </label>
+          {secret && <p className="state compact secret-output">{secret}</p>}
+          {feedback && <p className={feedback.includes("required") ? "state error compact" : "state compact"}>{feedback}</p>}
+        </div>
+        <DataTable
+          columns={["key", "active", "roles", "updated", "actions"]}
+          rows={clients.data.items.map((credential) => [
+            credential.client_key,
+            credential.active ? "active" : "inactive",
+            credential.roles.join(", "),
+            credential.updated_at,
+            <div key={credential.client_key} className="row-actions">
+              <button type="button" className="icon-button" aria-label={`Rotate ${credential.client_key}`} onClick={() => void rotateClient(credential.client_key)}>
+                <RefreshCcw size={16} />
+                <span>Rotate</span>
+              </button>
+              <button type="button" className="icon-button" aria-label={`Deactivate ${credential.client_key}`} onClick={() => void deactivateClient(credential.client_key)}>
+                <ShieldCheck size={16} />
+                <span>Deactivate</span>
+              </button>
+            </div>
+          ])}
+          empty="No client credentials"
+        />
+      </section>
+      <div className="split">
       <section className="panel">
         <div className="panel-heading">
           <h2>Admin sessions</h2>
@@ -725,6 +1014,7 @@ function ClientsView(): ReactElement {
           empty="No API activity"
         />
       </section>
+      </div>
     </div>
   );
 }
@@ -762,7 +1052,7 @@ function AsyncTable<T>({
 }: {
   state: LoadState<Page<T>>;
   columns: string[];
-  mapRow: (row: T) => Array<string | number>;
+  mapRow: (row: T) => TableRow;
   empty: string;
 }): ReactElement {
   if (state.status !== "ready") {
@@ -777,7 +1067,7 @@ function DataTable({
   empty
 }: {
   columns: string[];
-  rows: Array<Array<string | number>>;
+  rows: TableRow[];
   empty: string;
 }): ReactElement {
   if (rows.length === 0) {
@@ -834,4 +1124,11 @@ function scopeId(scope: ConfigScope): string {
 
 function compactJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+type TableCell = string | number | ReactElement;
+type TableRow = TableCell[];
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
 }

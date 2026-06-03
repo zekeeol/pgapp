@@ -9,6 +9,7 @@ import (
 	pb "github.com/zekee/pgapp/sdk/go/gen/pgapp/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 var ErrNotConnected = errors.New("pgapp: client is not connected")
@@ -20,13 +21,23 @@ type Client struct {
 	cache    pb.CacheServiceClient
 	mq       pb.MQServiceClient
 	config   pb.ConfigServiceClient
+	key      string
+	secret   string
 }
 
 func NewClient(endpoint string, timeout time.Duration) *Client {
 	return &Client{endpoint: endpoint, timeout: timeout}
 }
 
+func NewClientWithCredentials(endpoint string, timeout time.Duration, key string, secret string) *Client {
+	return &Client{endpoint: endpoint, timeout: timeout, key: key, secret: secret}
+}
+
 func Dial(ctx context.Context, endpoint string, timeout time.Duration) (*Client, error) {
+	return DialWithCredentials(ctx, endpoint, timeout, "", "")
+}
+
+func DialWithCredentials(ctx context.Context, endpoint string, timeout time.Duration, key string, secret string) (*Client, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
@@ -38,6 +49,8 @@ func Dial(ctx context.Context, endpoint string, timeout time.Duration) (*Client,
 		cache:    pb.NewCacheServiceClient(conn),
 		mq:       pb.NewMQServiceClient(conn),
 		config:   pb.NewConfigServiceClient(conn),
+		key:      key,
+		secret:   secret,
 	}
 	if timeout > 0 {
 		pingCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -97,6 +110,9 @@ func NewConfigScope(appID string, environment string, cluster string, namespace 
 }
 
 func (c *Client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if c.key != "" || c.secret != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, "x-pgapp-key", c.key, "x-pgapp-secret", c.secret)
+	}
 	if c.timeout <= 0 {
 		return ctx, func() {}
 	}
@@ -218,6 +234,117 @@ func (c *CacheClient) Stats(ctx context.Context) (*pb.CacheStatsResponse, error)
 	ctx, cancel := c.client.withTimeout(ctx)
 	defer cancel()
 	return c.client.cache.Stats(ctx, &pb.CacheStatsRequest{})
+}
+
+func (c *CacheClient) Increment(ctx context.Context, namespace string, key string, delta int64, ttlSeconds int64) (int64, error) {
+	if c.client.cache == nil {
+		return 0, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.cache.Increment(ctx, &pb.IncrementRequest{
+		Namespace:  namespace,
+		Key:        key,
+		Delta:      delta,
+		TtlSeconds: ttlSeconds,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.Value, nil
+}
+
+func (c *CacheClient) Decrement(ctx context.Context, namespace string, key string, delta int64, ttlSeconds int64) (int64, error) {
+	if c.client.cache == nil {
+		return 0, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.cache.Decrement(ctx, &pb.DecrementRequest{
+		Namespace:  namespace,
+		Key:        key,
+		Delta:      delta,
+		TtlSeconds: ttlSeconds,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.Value, nil
+}
+
+func (c *CacheClient) SetNX(ctx context.Context, namespace string, key string, value []byte, ttlSeconds int64) (bool, error) {
+	if c.client.cache == nil {
+		return false, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.cache.SetNX(ctx, &pb.SetNXRequest{
+		Namespace:  namespace,
+		Key:        key,
+		Value:      value,
+		TtlSeconds: ttlSeconds,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.Created, nil
+}
+
+func (c *CacheClient) GetSet(ctx context.Context, namespace string, key string, value []byte, ttlSeconds int64) ([]byte, bool, error) {
+	if c.client.cache == nil {
+		return nil, false, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.cache.GetSet(ctx, &pb.GetSetRequest{
+		Namespace:  namespace,
+		Key:        key,
+		Value:      value,
+		TtlSeconds: ttlSeconds,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if !resp.Hit {
+		return nil, false, nil
+	}
+	return resp.OldValue, true, nil
+}
+
+func (c *CacheClient) Append(ctx context.Context, namespace string, key string, value []byte, ttlSeconds int64) (int64, error) {
+	if c.client.cache == nil {
+		return 0, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.cache.Append(ctx, &pb.AppendRequest{
+		Namespace:  namespace,
+		Key:        key,
+		Value:      value,
+		TtlSeconds: ttlSeconds,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.Length, nil
+}
+
+func (c *CacheClient) Prepend(ctx context.Context, namespace string, key string, value []byte, ttlSeconds int64) (int64, error) {
+	if c.client.cache == nil {
+		return 0, ErrNotConnected
+	}
+	ctx, cancel := c.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := c.client.cache.Prepend(ctx, &pb.PrependRequest{
+		Namespace:  namespace,
+		Key:        key,
+		Value:      value,
+		TtlSeconds: ttlSeconds,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.Length, nil
 }
 
 func (m *MQClient) CreateQueue(ctx context.Context, queueName string) (bool, error) {
@@ -411,6 +538,76 @@ func (m *MQClient) DropQueue(ctx context.Context, queueName string) (bool, error
 		return false, err
 	}
 	return resp.Success, nil
+}
+
+func (m *MQClient) ListDLQMessages(ctx context.Context, queueName string, limit int32, offset int64) ([]*pb.DlqMessage, error) {
+	if m.client.mq == nil {
+		return nil, ErrNotConnected
+	}
+	ctx, cancel := m.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := m.client.mq.ListDlqMessages(ctx, &pb.ListDlqMessagesRequest{
+		QueueName: queueName,
+		Limit:     limit,
+		Offset:    offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Messages, nil
+}
+
+func (m *MQClient) GetDLQMessage(ctx context.Context, queueName string, originalMessageID int64) (*pb.DlqMessage, error) {
+	if m.client.mq == nil {
+		return nil, ErrNotConnected
+	}
+	ctx, cancel := m.client.withTimeout(ctx)
+	defer cancel()
+	return m.client.mq.GetDlqMessage(ctx, &pb.GetDlqMessageRequest{
+		QueueName:         queueName,
+		OriginalMessageId: originalMessageID,
+	})
+}
+
+func (m *MQClient) ReprocessDLQMessage(ctx context.Context, queueName string, originalMessageID int64) (bool, error) {
+	if m.client.mq == nil {
+		return false, ErrNotConnected
+	}
+	ctx, cancel := m.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := m.client.mq.ReprocessDlqMessage(ctx, &pb.ReprocessDlqMessageRequest{
+		QueueName:         queueName,
+		OriginalMessageId: originalMessageID,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.Success, nil
+}
+
+func (m *MQClient) PurgeDLQ(ctx context.Context, queueName string) (bool, error) {
+	if m.client.mq == nil {
+		return false, ErrNotConnected
+	}
+	ctx, cancel := m.client.withTimeout(ctx)
+	defer cancel()
+	resp, err := m.client.mq.PurgeDlq(ctx, &pb.PurgeDlqRequest{QueueName: queueName})
+	if err != nil {
+		return false, err
+	}
+	return resp.Success, nil
+}
+
+func (m *MQClient) StreamRead(ctx context.Context, queueName string, quantity int32, visibilityTimeoutSeconds int64) (pb.MQService_StreamReadClient, error) {
+	if m.client.mq == nil {
+		return nil, ErrNotConnected
+	}
+	ctx, _ = m.client.withTimeout(ctx)
+	return m.client.mq.StreamRead(ctx, &pb.StreamReadRequest{
+		QueueName:                queueName,
+		Quantity:                 quantity,
+		VisibilityTimeoutSeconds: visibilityTimeoutSeconds,
+	})
 }
 
 func (c *ConfigClient) GetLatestRelease(ctx context.Context, scope *pb.ConfigScope) (*ConfigRelease, error) {

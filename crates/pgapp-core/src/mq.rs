@@ -1,5 +1,6 @@
 use crate::{
     PgAppError, PgAppResult,
+    listen::mq_channel,
     validation::{
         parse_json_payload, validate_non_negative_seconds, validate_quantity, validate_queue_name,
     },
@@ -28,6 +29,7 @@ pub struct MqLimits {
     pub max_batch_size: i32,
     pub max_payload_bytes: usize,
     pub max_visibility_timeout_seconds: i64,
+    pub max_redelivery_count: i32,
 }
 
 impl Default for MqLimits {
@@ -36,6 +38,7 @@ impl Default for MqLimits {
             max_batch_size: 100,
             max_payload_bytes: 1024 * 1024,
             max_visibility_timeout_seconds: 12 * 60 * 60,
+            max_redelivery_count: 0,
         }
     }
 }
@@ -56,6 +59,24 @@ pub struct QueueMetrics {
     pub in_flight_message_count: i64,
     pub oldest_visible_message_age_seconds: i64,
     pub archived_message_count: i64,
+    pub dlq_message_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DlqMessage {
+    pub id: i64,
+    pub original_message_id: i64,
+    pub read_count: i32,
+    pub enqueued_at: DateTime<Utc>,
+    pub dead_lettered_at: DateTime<Utc>,
+    pub payload: Value,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DlqPage {
+    pub messages: Vec<DlqMessage>,
+    pub next_offset: Option<i64>,
 }
 
 impl MqStore {
@@ -80,13 +101,14 @@ impl MqStore {
         }
         sqlx::query(
             r#"
-            INSERT INTO mq_queues(name, durable)
-            VALUES ($1, $2)
+            INSERT INTO mq_queues(name, durable, max_redelivery_count)
+            VALUES ($1, $2, NULLIF($3, 0))
             ON CONFLICT (name) DO NOTHING
             "#,
         )
         .bind(queue_name)
         .bind(mode == QueueStorageMode::Durable)
+        .bind(self.limits.max_redelivery_count)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -132,10 +154,37 @@ impl MqStore {
         delay_seconds: i64,
     ) -> PgAppResult<Vec<i64>> {
         self.validate_batch_len(json_payloads.len())?;
-        let mut ids = Vec::with_capacity(json_payloads.len());
-        for payload in json_payloads {
-            ids.push(self.send(queue_name, payload, delay_seconds).await?);
+        validate_non_negative_seconds("delay_seconds", delay_seconds)?;
+        if json_payloads.is_empty() {
+            return Ok(Vec::new());
         }
+        let queue_id = self.queue_id(queue_name).await?;
+        let payloads = json_payloads
+            .iter()
+            .map(|payload| {
+                self.validate_payload_size(payload)?;
+                parse_json_payload(payload)
+            })
+            .collect::<PgAppResult<Vec<_>>>()?;
+        let mut ids = Vec::with_capacity(json_payloads.len());
+        let mut tx = self.pool.begin().await?;
+        for payload in payloads {
+            let id: i64 = sqlx::query_scalar(
+                r#"
+                INSERT INTO mq_messages(queue_id, payload, available_at)
+                VALUES ($1, $2, now() + ($3::double precision * interval '1 second'))
+                RETURNING id
+                "#,
+            )
+            .bind(queue_id)
+            .bind(payload)
+            .bind(delay_seconds as f64)
+            .fetch_one(&mut *tx)
+            .await?;
+            ids.push(id);
+        }
+        notify_queue(&mut tx, queue_name, ids.len()).await?;
+        tx.commit().await?;
         Ok(ids)
     }
 
@@ -149,6 +198,7 @@ impl MqStore {
         validate_non_negative_seconds("visibility_timeout_seconds", visibility_timeout_seconds)?;
         self.validate_visibility_timeout(visibility_timeout_seconds)?;
         let queue_id = self.queue_id(queue_name).await?;
+        self.dead_letter_due_messages(queue_id).await?;
         let rows = sqlx::query(
             r#"
             WITH picked AS (
@@ -179,6 +229,152 @@ impl MqStore {
         .await?;
 
         rows.into_iter().map(row_to_message).collect()
+    }
+
+    pub async fn dead_letter(
+        &self,
+        queue_name: &str,
+        message_id: i64,
+        reason: &str,
+    ) -> PgAppResult<bool> {
+        let queue_id = self.queue_id(queue_name).await?;
+        let moved = sqlx::query(
+            r#"
+            WITH moved AS (
+              DELETE FROM mq_messages
+              WHERE queue_id = $1 AND id = $2
+              RETURNING id, queue_id, payload, headers, read_count, created_at
+            )
+            INSERT INTO mq_dlq(queue_id, original_message_id, payload, headers, read_count, enqueued_at, reason)
+            SELECT queue_id, id, payload, headers, read_count, created_at, $3
+            FROM moved
+            ON CONFLICT (queue_id, original_message_id) DO NOTHING
+            "#,
+        )
+        .bind(queue_id)
+        .bind(message_id)
+        .bind(reason)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+        Ok(moved > 0)
+    }
+
+    pub async fn list_dlq_messages(
+        &self,
+        queue_name: &str,
+        limit: i64,
+        offset: i64,
+    ) -> PgAppResult<DlqPage> {
+        let queue_id = self.queue_id(queue_name).await?;
+        if offset < 0 {
+            return Err(PgAppError::InvalidArgument(
+                "offset must not be negative".to_string(),
+            ));
+        }
+        let limit = self.page_limit(limit)?;
+        let rows = sqlx::query(
+            r#"
+            SELECT id, original_message_id, payload, read_count, enqueued_at, dead_lettered_at, reason
+            FROM mq_dlq
+            WHERE queue_id = $1
+            ORDER BY dead_lettered_at DESC, id DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(queue_id)
+        .bind(limit + 1)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        let has_more = rows.len() as i64 > limit;
+        let messages = rows
+            .into_iter()
+            .take(limit as usize)
+            .map(row_to_dlq_message)
+            .collect::<PgAppResult<Vec<_>>>()?;
+        let next_offset = has_more.then_some(offset + limit);
+        Ok(DlqPage {
+            messages,
+            next_offset,
+        })
+    }
+
+    pub async fn get_dlq_message(
+        &self,
+        queue_name: &str,
+        original_message_id: i64,
+    ) -> PgAppResult<DlqMessage> {
+        let queue_id = self.queue_id(queue_name).await?;
+        let row = sqlx::query(
+            r#"
+            SELECT id, original_message_id, payload, read_count, enqueued_at, dead_lettered_at, reason
+            FROM mq_dlq
+            WHERE queue_id = $1 AND original_message_id = $2
+            "#,
+        )
+        .bind(queue_id)
+        .bind(original_message_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_dlq_message)
+            .transpose()?
+            .ok_or_else(|| PgAppError::NotFound(format!("DLQ message {original_message_id}")))
+    }
+
+    pub async fn reprocess_dlq_message(
+        &self,
+        queue_name: &str,
+        original_message_id: i64,
+    ) -> PgAppResult<bool> {
+        let queue_id = self.queue_id(queue_name).await?;
+        let mut tx = self.pool.begin().await?;
+        let inserted = sqlx::query(
+            r#"
+            WITH moved AS (
+              DELETE FROM mq_dlq
+              WHERE queue_id = $1 AND original_message_id = $2
+              RETURNING original_message_id, queue_id, payload, read_count, enqueued_at
+            )
+            INSERT INTO mq_messages(id, queue_id, payload, read_count, available_at, visibility_timeout_at, ack_token, created_at, updated_at)
+            SELECT original_message_id, queue_id, payload, 0, now(), NULL, NULL, enqueued_at, now()
+            FROM moved
+            "#,
+        )
+        .bind(queue_id)
+        .bind(original_message_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        tx.commit().await?;
+        Ok(inserted > 0)
+    }
+
+    pub async fn purge_dlq(&self, queue_name: &str) -> PgAppResult<i64> {
+        let queue_id = self.queue_id(queue_name).await?;
+        let deleted = sqlx::query("DELETE FROM mq_dlq WHERE queue_id = $1")
+            .bind(queue_id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected() as i64;
+        Ok(deleted)
+    }
+
+    pub async fn sweep_dlq(&self, retention_days: i64) -> PgAppResult<i64> {
+        if retention_days <= 0 {
+            return Ok(0);
+        }
+        let deleted = sqlx::query(
+            r#"
+            DELETE FROM mq_dlq
+            WHERE dead_lettered_at < now() - ($1::double precision * interval '1 day')
+            "#,
+        )
+        .bind(retention_days as f64)
+        .execute(&self.pool)
+        .await?
+        .rows_affected() as i64;
+        Ok(deleted)
     }
 
     pub async fn read_with_poll(
@@ -332,11 +528,17 @@ impl MqStore {
                 .bind(queue_id)
                 .fetch_one(&self.pool)
                 .await?;
+        let dlq_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*)::bigint FROM mq_dlq WHERE queue_id = $1")
+                .bind(queue_id)
+                .fetch_one(&self.pool)
+                .await?;
         Ok(QueueMetrics {
             visible_message_count: row.try_get("visible_count")?,
             in_flight_message_count: row.try_get("in_flight_count")?,
             oldest_visible_message_age_seconds: row.try_get("oldest_age")?,
             archived_message_count: archived_count,
+            dlq_message_count: dlq_count,
         })
     }
 
@@ -348,6 +550,7 @@ impl MqStore {
     ) -> PgAppResult<i64> {
         validate_non_negative_seconds("delay_seconds", delay_seconds)?;
         let queue_id = self.queue_id(queue_name).await?;
+        let mut tx = self.pool.begin().await?;
         let id: i64 = sqlx::query_scalar(
             r#"
             INSERT INTO mq_messages(queue_id, payload, available_at)
@@ -358,8 +561,10 @@ impl MqStore {
         .bind(queue_id)
         .bind(payload)
         .bind(delay_seconds as f64)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+        notify_queue(&mut tx, queue_name, 1).await?;
+        tx.commit().await?;
         Ok(id)
     }
 
@@ -401,6 +606,69 @@ impl MqStore {
         }
         Ok(())
     }
+
+    fn page_limit(&self, limit: i64) -> PgAppResult<i64> {
+        if limit < 0 {
+            return Err(PgAppError::InvalidArgument(
+                "limit must not be negative".to_string(),
+            ));
+        }
+        if limit == 0 {
+            return Ok(self.limits.max_batch_size as i64);
+        }
+        Ok(limit.min(self.limits.max_batch_size as i64))
+    }
+
+    async fn dead_letter_due_messages(&self, queue_id: i64) -> PgAppResult<i64> {
+        let moved = sqlx::query(
+            r#"
+            WITH queue_config AS (
+              SELECT COALESCE(max_redelivery_count, 0) AS max_redelivery_count
+              FROM mq_queues
+              WHERE id = $1
+            ),
+            moved AS (
+              DELETE FROM mq_messages m
+              USING queue_config c
+              WHERE m.queue_id = $1
+                AND c.max_redelivery_count > 0
+                AND m.read_count >= c.max_redelivery_count
+                AND m.available_at <= now()
+                AND (m.visibility_timeout_at IS NULL OR m.visibility_timeout_at <= now())
+              RETURNING m.id, m.queue_id, m.payload, m.headers, m.read_count, m.created_at, c.max_redelivery_count
+            )
+            INSERT INTO mq_dlq(queue_id, original_message_id, payload, headers, read_count, enqueued_at, reason)
+            SELECT queue_id,
+                   id,
+                   payload,
+                   headers,
+                   read_count,
+                   created_at,
+                   'max_redelivery_count=' || max_redelivery_count::text
+            FROM moved
+            ON CONFLICT (queue_id, original_message_id) DO NOTHING
+            "#,
+        )
+        .bind(queue_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected() as i64;
+        Ok(moved)
+    }
+}
+
+async fn notify_queue(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    queue_name: &str,
+    count: usize,
+) -> PgAppResult<()> {
+    let channel = mq_channel(queue_name)?;
+    sqlx::query("SELECT pg_notify($1, $2)")
+        .bind(channel)
+        .bind(count.to_string())
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 fn row_to_message(row: sqlx::postgres::PgRow) -> PgAppResult<QueueMessage> {
@@ -413,6 +681,18 @@ fn row_to_message(row: sqlx::postgres::PgRow) -> PgAppResult<QueueMessage> {
             .try_get::<Option<String>, _>("ack_token")?
             .unwrap_or_default(),
         payload: row.try_get("payload")?,
+    })
+}
+
+fn row_to_dlq_message(row: sqlx::postgres::PgRow) -> PgAppResult<DlqMessage> {
+    Ok(DlqMessage {
+        id: row.try_get("id")?,
+        original_message_id: row.try_get("original_message_id")?,
+        read_count: row.try_get("read_count")?,
+        enqueued_at: row.try_get("enqueued_at")?,
+        dead_lettered_at: row.try_get("dead_lettered_at")?,
+        payload: row.try_get("payload")?,
+        reason: row.try_get("reason")?,
     })
 }
 
@@ -447,8 +727,10 @@ mod tests {
             in_flight_message_count: 2,
             oldest_visible_message_age_seconds: 3,
             archived_message_count: 4,
+            dlq_message_count: 5,
         };
         assert_eq!(metrics.visible_message_count, 1);
         assert_eq!(metrics.archived_message_count, 4);
+        assert_eq!(metrics.dlq_message_count, 5);
     }
 }

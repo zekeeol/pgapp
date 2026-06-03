@@ -745,6 +745,686 @@ func (x *CacheStatsResponse) GetNamespaceUsage() []*NamespaceUsage {
 	return nil
 }
 
+type IncrementRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Delta         int64                  `protobuf:"varint,3,opt,name=delta,proto3" json:"delta,omitempty"`
+	TtlSeconds    int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IncrementRequest) Reset() {
+	*x = IncrementRequest{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IncrementRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IncrementRequest) ProtoMessage() {}
+
+func (x *IncrementRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IncrementRequest.ProtoReflect.Descriptor instead.
+func (*IncrementRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *IncrementRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *IncrementRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *IncrementRequest) GetDelta() int64 {
+	if x != nil {
+		return x.Delta
+	}
+	return 0
+}
+
+func (x *IncrementRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+type IncrementResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         int64                  `protobuf:"varint,1,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IncrementResponse) Reset() {
+	*x = IncrementResponse{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IncrementResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IncrementResponse) ProtoMessage() {}
+
+func (x *IncrementResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IncrementResponse.ProtoReflect.Descriptor instead.
+func (*IncrementResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *IncrementResponse) GetValue() int64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+type DecrementRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Delta         int64                  `protobuf:"varint,3,opt,name=delta,proto3" json:"delta,omitempty"`
+	TtlSeconds    int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecrementRequest) Reset() {
+	*x = DecrementRequest{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecrementRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecrementRequest) ProtoMessage() {}
+
+func (x *DecrementRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecrementRequest.ProtoReflect.Descriptor instead.
+func (*DecrementRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *DecrementRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *DecrementRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *DecrementRequest) GetDelta() int64 {
+	if x != nil {
+		return x.Delta
+	}
+	return 0
+}
+
+func (x *DecrementRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+type DecrementResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         int64                  `protobuf:"varint,1,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecrementResponse) Reset() {
+	*x = DecrementResponse{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecrementResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecrementResponse) ProtoMessage() {}
+
+func (x *DecrementResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecrementResponse.ProtoReflect.Descriptor instead.
+func (*DecrementResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *DecrementResponse) GetValue() int64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+type SetNXRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	TtlSeconds    int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetNXRequest) Reset() {
+	*x = SetNXRequest{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetNXRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetNXRequest) ProtoMessage() {}
+
+func (x *SetNXRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetNXRequest.ProtoReflect.Descriptor instead.
+func (*SetNXRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SetNXRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *SetNXRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *SetNXRequest) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *SetNXRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+type SetNXResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Created       bool                   `protobuf:"varint,1,opt,name=created,proto3" json:"created,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetNXResponse) Reset() {
+	*x = SetNXResponse{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetNXResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetNXResponse) ProtoMessage() {}
+
+func (x *SetNXResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetNXResponse.ProtoReflect.Descriptor instead.
+func (*SetNXResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *SetNXResponse) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
+}
+
+type GetSetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	TtlSeconds    int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSetRequest) Reset() {
+	*x = GetSetRequest{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSetRequest) ProtoMessage() {}
+
+func (x *GetSetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSetRequest.ProtoReflect.Descriptor instead.
+func (*GetSetRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *GetSetRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *GetSetRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *GetSetRequest) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *GetSetRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+type GetSetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hit           bool                   `protobuf:"varint,1,opt,name=hit,proto3" json:"hit,omitempty"`
+	OldValue      []byte                 `protobuf:"bytes,2,opt,name=old_value,json=oldValue,proto3" json:"old_value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSetResponse) Reset() {
+	*x = GetSetResponse{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSetResponse) ProtoMessage() {}
+
+func (x *GetSetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSetResponse.ProtoReflect.Descriptor instead.
+func (*GetSetResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetSetResponse) GetHit() bool {
+	if x != nil {
+		return x.Hit
+	}
+	return false
+}
+
+func (x *GetSetResponse) GetOldValue() []byte {
+	if x != nil {
+		return x.OldValue
+	}
+	return nil
+}
+
+type AppendRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	TtlSeconds    int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppendRequest) Reset() {
+	*x = AppendRequest{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppendRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppendRequest) ProtoMessage() {}
+
+func (x *AppendRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppendRequest.ProtoReflect.Descriptor instead.
+func (*AppendRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AppendRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *AppendRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *AppendRequest) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *AppendRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+type AppendResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Length        int64                  `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppendResponse) Reset() {
+	*x = AppendResponse{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppendResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppendResponse) ProtoMessage() {}
+
+func (x *AppendResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppendResponse.ProtoReflect.Descriptor instead.
+func (*AppendResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AppendResponse) GetLength() int64 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+type PrependRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	TtlSeconds    int64                  `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrependRequest) Reset() {
+	*x = PrependRequest{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrependRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrependRequest) ProtoMessage() {}
+
+func (x *PrependRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrependRequest.ProtoReflect.Descriptor instead.
+func (*PrependRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *PrependRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *PrependRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *PrependRequest) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *PrependRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+type PrependResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Length        int64                  `protobuf:"varint,1,opt,name=length,proto3" json:"length,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrependResponse) Reset() {
+	*x = PrependResponse{}
+	mi := &file_pgapp_v1_cache_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrependResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrependResponse) ProtoMessage() {}
+
+func (x *PrependResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_cache_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrependResponse.ProtoReflect.Descriptor instead.
+func (*PrependResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_cache_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PrependResponse) GetLength() int64 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
 var File_pgapp_v1_cache_proto protoreflect.FileDescriptor
 
 const file_pgapp_v1_cache_proto_rawDesc = "" +
@@ -795,7 +1475,56 @@ const file_pgapp_v1_cache_proto_rawDesc = "" +
 	"\x10expired_removals\x18\x06 \x01(\x03R\x0fexpiredRemovals\x12*\n" +
 	"\x11logical_key_count\x18\a \x01(\x03R\x0flogicalKeyCount\x12*\n" +
 	"\x11logical_byte_size\x18\b \x01(\x03R\x0flogicalByteSize\x12A\n" +
-	"\x0fnamespace_usage\x18\t \x03(\v2\x18.pgapp.v1.NamespaceUsageR\x0enamespaceUsage2\xf0\x03\n" +
+	"\x0fnamespace_usage\x18\t \x03(\v2\x18.pgapp.v1.NamespaceUsageR\x0enamespaceUsage\"y\n" +
+	"\x10IncrementRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05delta\x18\x03 \x01(\x03R\x05delta\x12\x1f\n" +
+	"\vttl_seconds\x18\x04 \x01(\x03R\n" +
+	"ttlSeconds\")\n" +
+	"\x11IncrementResponse\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\x03R\x05value\"y\n" +
+	"\x10DecrementRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05delta\x18\x03 \x01(\x03R\x05delta\x12\x1f\n" +
+	"\vttl_seconds\x18\x04 \x01(\x03R\n" +
+	"ttlSeconds\")\n" +
+	"\x11DecrementResponse\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\x03R\x05value\"u\n" +
+	"\fSetNXRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\x12\x1f\n" +
+	"\vttl_seconds\x18\x04 \x01(\x03R\n" +
+	"ttlSeconds\")\n" +
+	"\rSetNXResponse\x12\x18\n" +
+	"\acreated\x18\x01 \x01(\bR\acreated\"v\n" +
+	"\rGetSetRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\x12\x1f\n" +
+	"\vttl_seconds\x18\x04 \x01(\x03R\n" +
+	"ttlSeconds\"?\n" +
+	"\x0eGetSetResponse\x12\x10\n" +
+	"\x03hit\x18\x01 \x01(\bR\x03hit\x12\x1b\n" +
+	"\told_value\x18\x02 \x01(\fR\boldValue\"v\n" +
+	"\rAppendRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\x12\x1f\n" +
+	"\vttl_seconds\x18\x04 \x01(\x03R\n" +
+	"ttlSeconds\"(\n" +
+	"\x0eAppendResponse\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\x03R\x06length\"w\n" +
+	"\x0ePrependRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\x12\x1f\n" +
+	"\vttl_seconds\x18\x04 \x01(\x03R\n" +
+	"ttlSeconds\")\n" +
+	"\x0fPrependResponse\x12\x16\n" +
+	"\x06length\x18\x01 \x01(\x03R\x06length2\xf0\x06\n" +
 	"\fCacheService\x12;\n" +
 	"\x03Set\x12\x19.pgapp.v1.SetCacheRequest\x1a\x19.pgapp.v1.OperationResult\x12<\n" +
 	"\x03Get\x12\x19.pgapp.v1.GetCacheRequest\x1a\x1a.pgapp.v1.GetCacheResponse\x12?\n" +
@@ -803,7 +1532,13 @@ const file_pgapp_v1_cache_proto_rawDesc = "" +
 	"\x06Delete\x12\x1c.pgapp.v1.DeleteCacheRequest\x1a\x19.pgapp.v1.OperationResult\x12E\n" +
 	"\x06Exists\x12\x1c.pgapp.v1.ExistsCacheRequest\x1a\x1d.pgapp.v1.ExistsCacheResponse\x12V\n" +
 	"\x13InvalidateNamespace\x12$.pgapp.v1.InvalidateNamespaceRequest\x1a\x19.pgapp.v1.OperationResult\x12B\n" +
-	"\x05Stats\x12\x1b.pgapp.v1.CacheStatsRequest\x1a\x1c.pgapp.v1.CacheStatsResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3"
+	"\x05Stats\x12\x1b.pgapp.v1.CacheStatsRequest\x1a\x1c.pgapp.v1.CacheStatsResponse\x12D\n" +
+	"\tIncrement\x12\x1a.pgapp.v1.IncrementRequest\x1a\x1b.pgapp.v1.IncrementResponse\x12D\n" +
+	"\tDecrement\x12\x1a.pgapp.v1.DecrementRequest\x1a\x1b.pgapp.v1.DecrementResponse\x128\n" +
+	"\x05SetNX\x12\x16.pgapp.v1.SetNXRequest\x1a\x17.pgapp.v1.SetNXResponse\x12;\n" +
+	"\x06GetSet\x12\x17.pgapp.v1.GetSetRequest\x1a\x18.pgapp.v1.GetSetResponse\x12;\n" +
+	"\x06Append\x12\x17.pgapp.v1.AppendRequest\x1a\x18.pgapp.v1.AppendResponse\x12>\n" +
+	"\aPrepend\x12\x18.pgapp.v1.PrependRequest\x1a\x19.pgapp.v1.PrependResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3"
 
 var (
 	file_pgapp_v1_cache_proto_rawDescOnce sync.Once
@@ -817,7 +1552,7 @@ func file_pgapp_v1_cache_proto_rawDescGZIP() []byte {
 	return file_pgapp_v1_cache_proto_rawDescData
 }
 
-var file_pgapp_v1_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_pgapp_v1_cache_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_pgapp_v1_cache_proto_goTypes = []any{
 	(*SetCacheRequest)(nil),            // 0: pgapp.v1.SetCacheRequest
 	(*GetCacheRequest)(nil),            // 1: pgapp.v1.GetCacheRequest
@@ -832,7 +1567,19 @@ var file_pgapp_v1_cache_proto_goTypes = []any{
 	(*CacheStatsRequest)(nil),          // 10: pgapp.v1.CacheStatsRequest
 	(*NamespaceUsage)(nil),             // 11: pgapp.v1.NamespaceUsage
 	(*CacheStatsResponse)(nil),         // 12: pgapp.v1.CacheStatsResponse
-	(*OperationResult)(nil),            // 13: pgapp.v1.OperationResult
+	(*IncrementRequest)(nil),           // 13: pgapp.v1.IncrementRequest
+	(*IncrementResponse)(nil),          // 14: pgapp.v1.IncrementResponse
+	(*DecrementRequest)(nil),           // 15: pgapp.v1.DecrementRequest
+	(*DecrementResponse)(nil),          // 16: pgapp.v1.DecrementResponse
+	(*SetNXRequest)(nil),               // 17: pgapp.v1.SetNXRequest
+	(*SetNXResponse)(nil),              // 18: pgapp.v1.SetNXResponse
+	(*GetSetRequest)(nil),              // 19: pgapp.v1.GetSetRequest
+	(*GetSetResponse)(nil),             // 20: pgapp.v1.GetSetResponse
+	(*AppendRequest)(nil),              // 21: pgapp.v1.AppendRequest
+	(*AppendResponse)(nil),             // 22: pgapp.v1.AppendResponse
+	(*PrependRequest)(nil),             // 23: pgapp.v1.PrependRequest
+	(*PrependResponse)(nil),            // 24: pgapp.v1.PrependResponse
+	(*OperationResult)(nil),            // 25: pgapp.v1.OperationResult
 }
 var file_pgapp_v1_cache_proto_depIdxs = []int32{
 	4,  // 0: pgapp.v1.MGetCacheResponse.items:type_name -> pgapp.v1.CacheItem
@@ -844,15 +1591,27 @@ var file_pgapp_v1_cache_proto_depIdxs = []int32{
 	7,  // 6: pgapp.v1.CacheService.Exists:input_type -> pgapp.v1.ExistsCacheRequest
 	9,  // 7: pgapp.v1.CacheService.InvalidateNamespace:input_type -> pgapp.v1.InvalidateNamespaceRequest
 	10, // 8: pgapp.v1.CacheService.Stats:input_type -> pgapp.v1.CacheStatsRequest
-	13, // 9: pgapp.v1.CacheService.Set:output_type -> pgapp.v1.OperationResult
-	2,  // 10: pgapp.v1.CacheService.Get:output_type -> pgapp.v1.GetCacheResponse
-	5,  // 11: pgapp.v1.CacheService.MGet:output_type -> pgapp.v1.MGetCacheResponse
-	13, // 12: pgapp.v1.CacheService.Delete:output_type -> pgapp.v1.OperationResult
-	8,  // 13: pgapp.v1.CacheService.Exists:output_type -> pgapp.v1.ExistsCacheResponse
-	13, // 14: pgapp.v1.CacheService.InvalidateNamespace:output_type -> pgapp.v1.OperationResult
-	12, // 15: pgapp.v1.CacheService.Stats:output_type -> pgapp.v1.CacheStatsResponse
-	9,  // [9:16] is the sub-list for method output_type
-	2,  // [2:9] is the sub-list for method input_type
+	13, // 9: pgapp.v1.CacheService.Increment:input_type -> pgapp.v1.IncrementRequest
+	15, // 10: pgapp.v1.CacheService.Decrement:input_type -> pgapp.v1.DecrementRequest
+	17, // 11: pgapp.v1.CacheService.SetNX:input_type -> pgapp.v1.SetNXRequest
+	19, // 12: pgapp.v1.CacheService.GetSet:input_type -> pgapp.v1.GetSetRequest
+	21, // 13: pgapp.v1.CacheService.Append:input_type -> pgapp.v1.AppendRequest
+	23, // 14: pgapp.v1.CacheService.Prepend:input_type -> pgapp.v1.PrependRequest
+	25, // 15: pgapp.v1.CacheService.Set:output_type -> pgapp.v1.OperationResult
+	2,  // 16: pgapp.v1.CacheService.Get:output_type -> pgapp.v1.GetCacheResponse
+	5,  // 17: pgapp.v1.CacheService.MGet:output_type -> pgapp.v1.MGetCacheResponse
+	25, // 18: pgapp.v1.CacheService.Delete:output_type -> pgapp.v1.OperationResult
+	8,  // 19: pgapp.v1.CacheService.Exists:output_type -> pgapp.v1.ExistsCacheResponse
+	25, // 20: pgapp.v1.CacheService.InvalidateNamespace:output_type -> pgapp.v1.OperationResult
+	12, // 21: pgapp.v1.CacheService.Stats:output_type -> pgapp.v1.CacheStatsResponse
+	14, // 22: pgapp.v1.CacheService.Increment:output_type -> pgapp.v1.IncrementResponse
+	16, // 23: pgapp.v1.CacheService.Decrement:output_type -> pgapp.v1.DecrementResponse
+	18, // 24: pgapp.v1.CacheService.SetNX:output_type -> pgapp.v1.SetNXResponse
+	20, // 25: pgapp.v1.CacheService.GetSet:output_type -> pgapp.v1.GetSetResponse
+	22, // 26: pgapp.v1.CacheService.Append:output_type -> pgapp.v1.AppendResponse
+	24, // 27: pgapp.v1.CacheService.Prepend:output_type -> pgapp.v1.PrependResponse
+	15, // [15:28] is the sub-list for method output_type
+	2,  // [2:15] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -870,7 +1629,7 @@ func file_pgapp_v1_cache_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pgapp_v1_cache_proto_rawDesc), len(file_pgapp_v1_cache_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

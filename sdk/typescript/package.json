@@ -1,0 +1,28 @@
+{
+  "name": "@pgapp/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for PGApp Cache, MQ, and Config services.",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate": "mkdir -p src/gen && protoc -I ../../proto --ts_out src/gen --ts_opt generate_dependencies,long_type_string ../../proto/pgapp/v1/common.proto ../../proto/pgapp/v1/health.proto ../../proto/pgapp/v1/cache.proto ../../proto/pgapp/v1/mq.proto ../../proto/pgapp/v1/config.proto",
+    "test": "npm run build"
+  },
+  "peerDependencies": {
+    "@grpc/grpc-js": "^1.14.0"
+  },
+  "dependencies": {
+    "@protobuf-ts/grpc-transport": "^2.11.1",
+    "@protobuf-ts/runtime": "^2.11.1",
+    "@protobuf-ts/runtime-rpc": "^2.11.1"
+  },
+  "devDependencies": {
+    "@protobuf-ts/plugin": "^2.11.1",
+    "typescript": "^5.9.0"
+  }
+}

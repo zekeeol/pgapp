@@ -1,17 +1,19 @@
 use pgapp_proto::pgapp::v1::{
-    AckMessageRequest, ArchiveMessageRequest, CacheItem, CacheStatsRequest, CacheStatsResponse,
-    ConfigScope, CreateQueueRequest, DeleteCacheRequest, DropQueueRequest, ExistsCacheRequest,
-    GetCacheRequest, GetConfigReleaseRequest, InvalidateNamespaceRequest, MGetCacheRequest,
-    PurgeQueueRequest, QueueMessage, QueueMetricsRequest, QueueMetricsResponse, QueueStorageMode,
-    ReadMessagesRequest, ReadWithPollRequest, SendBatchRequest, SendMessageRequest,
-    SetCacheRequest, SetVisibilityTimeoutRequest, WatchConfigRequest,
-    cache_service_client::CacheServiceClient, config_service_client::ConfigServiceClient,
-    mq_service_client::MqServiceClient,
+    AckMessageRequest, AppendRequest, ArchiveMessageRequest, CacheItem, CacheStatsRequest,
+    CacheStatsResponse, ConfigScope, CreateQueueRequest, DecrementRequest, DeleteCacheRequest,
+    DlqMessage, DropQueueRequest, ExistsCacheRequest, GetCacheRequest, GetConfigReleaseRequest,
+    GetDlqMessageRequest, GetSetRequest, IncrementRequest, InvalidateNamespaceRequest,
+    ListDlqMessagesRequest, MGetCacheRequest, PrependRequest, PurgeDlqRequest, PurgeQueueRequest,
+    QueueMessage, QueueMetricsRequest, QueueMetricsResponse, QueueStorageMode, ReadMessagesRequest,
+    ReadMessagesResponse, ReadWithPollRequest, ReprocessDlqMessageRequest, SendBatchRequest,
+    SendMessageRequest, SetCacheRequest, SetNxRequest, SetVisibilityTimeoutRequest,
+    StreamReadRequest, WatchConfigRequest, cache_service_client::CacheServiceClient,
+    config_service_client::ConfigServiceClient, mq_service_client::MqServiceClient,
 };
 use serde_json::Value;
 use std::error::Error;
 use std::time::Duration;
-use tonic::{Request, Status, transport::Channel};
+use tonic::{Request, Status, Streaming, metadata::MetadataValue, transport::Channel};
 
 pub type SdkResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -19,7 +21,14 @@ pub type SdkResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 pub struct PgAppClient {
     endpoint: String,
     timeout: Option<Duration>,
+    credentials: Option<ClientCredentials>,
     channel: Channel,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClientCredentials {
+    key: String,
+    secret: String,
 }
 
 impl PgAppClient {
@@ -36,6 +45,26 @@ impl PgAppClient {
         Ok(Self {
             endpoint,
             timeout,
+            credentials: None,
+            channel,
+        })
+    }
+
+    pub async fn connect_with_timeout_and_credentials(
+        endpoint: impl Into<String>,
+        timeout: Option<Duration>,
+        key: impl Into<String>,
+        secret: impl Into<String>,
+    ) -> SdkResult<Self> {
+        let endpoint = endpoint.into();
+        let channel = Channel::from_shared(endpoint.clone())?.connect().await?;
+        Ok(Self {
+            endpoint,
+            timeout,
+            credentials: Some(ClientCredentials {
+                key: key.into(),
+                secret: secret.into(),
+            }),
             channel,
         })
     }
@@ -52,6 +81,7 @@ impl PgAppClient {
         CacheClient {
             inner: CacheServiceClient::new(self.channel.clone()),
             timeout: self.timeout,
+            credentials: self.credentials.clone(),
         }
     }
 
@@ -59,6 +89,7 @@ impl PgAppClient {
         MqClient {
             inner: MqServiceClient::new(self.channel.clone()),
             timeout: self.timeout,
+            credentials: self.credentials.clone(),
         }
     }
 
@@ -66,6 +97,7 @@ impl PgAppClient {
         ConfigClient {
             inner: ConfigServiceClient::new(self.channel.clone()),
             timeout: self.timeout,
+            credentials: self.credentials.clone(),
         }
     }
 }
@@ -74,6 +106,7 @@ impl PgAppClient {
 pub struct CacheClient {
     inner: CacheServiceClient<Channel>,
     timeout: Option<Duration>,
+    credentials: Option<ClientCredentials>,
 }
 
 impl CacheClient {
@@ -147,12 +180,105 @@ impl CacheClient {
         Ok(self.inner.stats(request).await?.into_inner())
     }
 
+    pub async fn increment(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        delta: i64,
+        ttl_seconds: Option<i64>,
+    ) -> Result<i64, Status> {
+        let request = self.with_timeout(IncrementRequest {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            delta,
+            ttl_seconds: ttl_seconds.unwrap_or_default(),
+        });
+        Ok(self.inner.increment(request).await?.into_inner().value)
+    }
+
+    pub async fn decrement(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        delta: i64,
+        ttl_seconds: Option<i64>,
+    ) -> Result<i64, Status> {
+        let request = self.with_timeout(DecrementRequest {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            delta,
+            ttl_seconds: ttl_seconds.unwrap_or_default(),
+        });
+        Ok(self.inner.decrement(request).await?.into_inner().value)
+    }
+
+    pub async fn set_nx(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        value: Vec<u8>,
+        ttl_seconds: Option<i64>,
+    ) -> Result<bool, Status> {
+        let request = self.with_timeout(SetNxRequest {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            value,
+            ttl_seconds: ttl_seconds.unwrap_or_default(),
+        });
+        Ok(self.inner.set_nx(request).await?.into_inner().created)
+    }
+
+    pub async fn get_set(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        value: Vec<u8>,
+        ttl_seconds: Option<i64>,
+    ) -> Result<Option<Vec<u8>>, Status> {
+        let request = self.with_timeout(GetSetRequest {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            value,
+            ttl_seconds: ttl_seconds.unwrap_or_default(),
+        });
+        let response = self.inner.get_set(request).await?.into_inner();
+        Ok(response.hit.then_some(response.old_value))
+    }
+
+    pub async fn append(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        value: Vec<u8>,
+        ttl_seconds: Option<i64>,
+    ) -> Result<i64, Status> {
+        let request = self.with_timeout(AppendRequest {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            value,
+            ttl_seconds: ttl_seconds.unwrap_or_default(),
+        });
+        Ok(self.inner.append(request).await?.into_inner().length)
+    }
+
+    pub async fn prepend(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        value: Vec<u8>,
+        ttl_seconds: Option<i64>,
+    ) -> Result<i64, Status> {
+        let request = self.with_timeout(PrependRequest {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            value,
+            ttl_seconds: ttl_seconds.unwrap_or_default(),
+        });
+        Ok(self.inner.prepend(request).await?.into_inner().length)
+    }
+
     fn with_timeout<T>(&self, message: T) -> Request<T> {
-        let mut request = Request::new(message);
-        if let Some(timeout) = self.timeout {
-            request.set_timeout(timeout);
-        }
-        request
+        request_with_options(message, self.timeout, self.credentials.as_ref())
     }
 }
 
@@ -160,6 +286,7 @@ impl CacheClient {
 pub struct MqClient {
     inner: MqServiceClient<Channel>,
     timeout: Option<Duration>,
+    credentials: Option<ClientCredentials>,
 }
 
 impl MqClient {
@@ -324,12 +451,77 @@ impl MqClient {
         Ok(self.inner.drop_queue(request).await?.into_inner().success)
     }
 
+    pub async fn list_dlq_messages(
+        &mut self,
+        queue_name: &str,
+        limit: i32,
+        offset: i64,
+    ) -> Result<Vec<DlqMessage>, Status> {
+        let request = self.with_timeout(ListDlqMessagesRequest {
+            queue_name: queue_name.to_string(),
+            limit,
+            offset,
+        });
+        Ok(self
+            .inner
+            .list_dlq_messages(request)
+            .await?
+            .into_inner()
+            .messages)
+    }
+
+    pub async fn get_dlq_message(
+        &mut self,
+        queue_name: &str,
+        original_message_id: i64,
+    ) -> Result<DlqMessage, Status> {
+        let request = self.with_timeout(GetDlqMessageRequest {
+            queue_name: queue_name.to_string(),
+            original_message_id,
+        });
+        Ok(self.inner.get_dlq_message(request).await?.into_inner())
+    }
+
+    pub async fn reprocess_dlq_message(
+        &mut self,
+        queue_name: &str,
+        original_message_id: i64,
+    ) -> Result<bool, Status> {
+        let request = self.with_timeout(ReprocessDlqMessageRequest {
+            queue_name: queue_name.to_string(),
+            original_message_id,
+        });
+        Ok(self
+            .inner
+            .reprocess_dlq_message(request)
+            .await?
+            .into_inner()
+            .success)
+    }
+
+    pub async fn purge_dlq(&mut self, queue_name: &str) -> Result<bool, Status> {
+        let request = self.with_timeout(PurgeDlqRequest {
+            queue_name: queue_name.to_string(),
+        });
+        Ok(self.inner.purge_dlq(request).await?.into_inner().success)
+    }
+
+    pub async fn stream_read(
+        &mut self,
+        queue_name: &str,
+        quantity: i32,
+        visibility_timeout_seconds: i64,
+    ) -> Result<Streaming<ReadMessagesResponse>, Status> {
+        let request = self.with_timeout(StreamReadRequest {
+            queue_name: queue_name.to_string(),
+            quantity,
+            visibility_timeout_seconds,
+        });
+        Ok(self.inner.stream_read(request).await?.into_inner())
+    }
+
     fn with_timeout<T>(&self, message: T) -> Request<T> {
-        let mut request = Request::new(message);
-        if let Some(timeout) = self.timeout {
-            request.set_timeout(timeout);
-        }
-        request
+        request_with_options(message, self.timeout, self.credentials.as_ref())
     }
 }
 
@@ -337,6 +529,7 @@ impl MqClient {
 pub struct ConfigClient {
     inner: ConfigServiceClient<Channel>,
     timeout: Option<Duration>,
+    credentials: Option<ClientCredentials>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -415,12 +608,32 @@ impl ConfigClient {
     }
 
     fn with_timeout<T>(&self, message: T) -> Request<T> {
-        let mut request = Request::new(message);
-        if let Some(timeout) = self.timeout {
-            request.set_timeout(timeout);
-        }
-        request
+        request_with_options(message, self.timeout, self.credentials.as_ref())
     }
+}
+
+fn request_with_options<T>(
+    message: T,
+    timeout: Option<Duration>,
+    credentials: Option<&ClientCredentials>,
+) -> Request<T> {
+    let mut request = Request::new(message);
+    if let Some(timeout) = timeout {
+        request.set_timeout(timeout);
+    }
+    if let Some(credentials) = credentials {
+        request.metadata_mut().insert(
+            "x-pgapp-key",
+            MetadataValue::try_from(credentials.key.as_str())
+                .expect("pgapp credential key must be valid gRPC metadata"),
+        );
+        request.metadata_mut().insert(
+            "x-pgapp-secret",
+            MetadataValue::try_from(credentials.secret.as_str())
+                .expect("pgapp credential secret must be valid gRPC metadata"),
+        );
+    }
+    request
 }
 
 fn proto_release_to_snapshot(

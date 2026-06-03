@@ -35,6 +35,11 @@ pub struct ServerConfig {
     pub cache_limits: CacheLimits,
     pub default_request_timeout: Duration,
     pub transient_queues_enabled: bool,
+    pub auth_enabled: bool,
+    pub notify_enabled: bool,
+    pub max_redelivery_count: i32,
+    pub dlq_retention_days: i64,
+    pub max_schema_bytes: usize,
     pub admin: AdminConfig,
 }
 
@@ -105,6 +110,11 @@ impl ServerConfig {
                 30,
             )?),
             transient_queues_enabled: parse_bool(&map, "PGAPP_ENABLE_TRANSIENT_QUEUES", false)?,
+            auth_enabled: parse_bool(&map, "PGAPP_ENABLE_AUTH", false)?,
+            notify_enabled: parse_bool(&map, "PGAPP_ENABLE_NOTIFY", true)?,
+            max_redelivery_count: parse_non_negative_i32(&map, "PGAPP_MAX_REDELIVERY_COUNT", 0)?,
+            dlq_retention_days: parse_non_negative_i64(&map, "PGAPP_DLQ_RETENTION_DAYS", 0)?,
+            max_schema_bytes: parse_positive_usize(&map, "PGAPP_MAX_SCHEMA_BYTES", 256 * 1024)?,
             admin: AdminConfig {
                 enabled: admin_enabled,
                 bind_addr: admin_bind_addr,
@@ -158,6 +168,34 @@ fn parse_i64(map: &HashMap<String, String>, key: &str, default: i64) -> PgAppRes
     optional(map, key, &default.to_string())
         .parse()
         .map_err(|err| PgAppError::InvalidArgument(format!("invalid {key}: {err}")))
+}
+
+fn parse_non_negative_i32(
+    map: &HashMap<String, String>,
+    key: &str,
+    default: i32,
+) -> PgAppResult<i32> {
+    let parsed = parse_i32(map, key, default)?;
+    if parsed < 0 {
+        return Err(PgAppError::InvalidArgument(format!(
+            "{key} must not be negative"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn parse_non_negative_i64(
+    map: &HashMap<String, String>,
+    key: &str,
+    default: i64,
+) -> PgAppResult<i64> {
+    let parsed = parse_i64(map, key, default)?;
+    if parsed < 0 {
+        return Err(PgAppError::InvalidArgument(format!(
+            "{key} must not be negative"
+        )));
+    }
+    Ok(parsed)
 }
 
 fn parse_optional_i64(map: &HashMap<String, String>, key: &str) -> PgAppResult<Option<i64>> {
@@ -218,6 +256,11 @@ mod tests {
         assert!(!cfg.admin.enabled);
         assert_eq!(cfg.admin.bind_addr.to_string(), "127.0.0.1:8080");
         assert_eq!(cfg.admin.token, None);
+        assert!(!cfg.auth_enabled);
+        assert!(cfg.notify_enabled);
+        assert_eq!(cfg.max_redelivery_count, 0);
+        assert_eq!(cfg.dlq_retention_days, 0);
+        assert_eq!(cfg.max_schema_bytes, 256 * 1024);
     }
 
     #[test]
@@ -258,6 +301,24 @@ mod tests {
         assert_eq!(cfg.limits.max_config_watch_seconds, 45);
         assert_eq!(cfg.cache_limits.max_keys, Some(1000));
         assert_eq!(cfg.cache_limits.max_bytes, Some(4096));
+    }
+
+    #[test]
+    fn loads_phase_two_runtime_options() {
+        let mut env = base();
+        env.insert("PGAPP_ENABLE_AUTH".to_string(), "true".to_string());
+        env.insert("PGAPP_ENABLE_NOTIFY".to_string(), "false".to_string());
+        env.insert("PGAPP_MAX_REDELIVERY_COUNT".to_string(), "3".to_string());
+        env.insert("PGAPP_DLQ_RETENTION_DAYS".to_string(), "7".to_string());
+        env.insert("PGAPP_MAX_SCHEMA_BYTES".to_string(), "2048".to_string());
+
+        let cfg = ServerConfig::from_map(env).unwrap();
+
+        assert!(cfg.auth_enabled);
+        assert!(!cfg.notify_enabled);
+        assert_eq!(cfg.max_redelivery_count, 3);
+        assert_eq!(cfg.dlq_retention_days, 7);
+        assert_eq!(cfg.max_schema_bytes, 2048);
     }
 
     #[test]

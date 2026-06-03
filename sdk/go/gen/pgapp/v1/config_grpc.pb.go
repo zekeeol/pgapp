@@ -27,6 +27,8 @@ const (
 	ConfigService_GetRelease_FullMethodName   = "/pgapp.v1.ConfigService/GetRelease"
 	ConfigService_ListReleases_FullMethodName = "/pgapp.v1.ConfigService/ListReleases"
 	ConfigService_Watch_FullMethodName        = "/pgapp.v1.ConfigService/Watch"
+	ConfigService_SetSchema_FullMethodName    = "/pgapp.v1.ConfigService/SetSchema"
+	ConfigService_GetSchema_FullMethodName    = "/pgapp.v1.ConfigService/GetSchema"
 )
 
 // ConfigServiceClient is the client API for ConfigService service.
@@ -41,6 +43,8 @@ type ConfigServiceClient interface {
 	GetRelease(ctx context.Context, in *GetConfigReleaseRequest, opts ...grpc.CallOption) (*ConfigRelease, error)
 	ListReleases(ctx context.Context, in *ListConfigReleasesRequest, opts ...grpc.CallOption) (*ListConfigReleasesResponse, error)
 	Watch(ctx context.Context, in *WatchConfigRequest, opts ...grpc.CallOption) (*WatchConfigResponse, error)
+	SetSchema(ctx context.Context, in *SetConfigSchemaRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	GetSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*ConfigSchemaResponse, error)
 }
 
 type configServiceClient struct {
@@ -131,6 +135,26 @@ func (c *configServiceClient) Watch(ctx context.Context, in *WatchConfigRequest,
 	return out, nil
 }
 
+func (c *configServiceClient) SetSchema(ctx context.Context, in *SetConfigSchemaRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OperationResult)
+	err := c.cc.Invoke(ctx, ConfigService_SetSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *configServiceClient) GetSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*ConfigSchemaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigSchemaResponse)
+	err := c.cc.Invoke(ctx, ConfigService_GetSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConfigServiceServer is the server API for ConfigService service.
 // All implementations must embed UnimplementedConfigServiceServer
 // for forward compatibility.
@@ -143,6 +167,8 @@ type ConfigServiceServer interface {
 	GetRelease(context.Context, *GetConfigReleaseRequest) (*ConfigRelease, error)
 	ListReleases(context.Context, *ListConfigReleasesRequest) (*ListConfigReleasesResponse, error)
 	Watch(context.Context, *WatchConfigRequest) (*WatchConfigResponse, error)
+	SetSchema(context.Context, *SetConfigSchemaRequest) (*OperationResult, error)
+	GetSchema(context.Context, *GetConfigSchemaRequest) (*ConfigSchemaResponse, error)
 	mustEmbedUnimplementedConfigServiceServer()
 }
 
@@ -176,6 +202,12 @@ func (UnimplementedConfigServiceServer) ListReleases(context.Context, *ListConfi
 }
 func (UnimplementedConfigServiceServer) Watch(context.Context, *WatchConfigRequest) (*WatchConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Watch not implemented")
+}
+func (UnimplementedConfigServiceServer) SetSchema(context.Context, *SetConfigSchemaRequest) (*OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSchema not implemented")
+}
+func (UnimplementedConfigServiceServer) GetSchema(context.Context, *GetConfigSchemaRequest) (*ConfigSchemaResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSchema not implemented")
 }
 func (UnimplementedConfigServiceServer) mustEmbedUnimplementedConfigServiceServer() {}
 func (UnimplementedConfigServiceServer) testEmbeddedByValue()                       {}
@@ -342,6 +374,42 @@ func _ConfigService_Watch_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigService_SetSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetConfigSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigServiceServer).SetSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConfigService_SetSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigServiceServer).SetSchema(ctx, req.(*SetConfigSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ConfigService_GetSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConfigSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigServiceServer).GetSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConfigService_GetSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigServiceServer).GetSchema(ctx, req.(*GetConfigSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConfigService_ServiceDesc is the grpc.ServiceDesc for ConfigService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -380,6 +448,14 @@ var ConfigService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Watch",
 			Handler:    _ConfigService_Watch_Handler,
+		},
+		{
+			MethodName: "SetSchema",
+			Handler:    _ConfigService_SetSchema_Handler,
+		},
+		{
+			MethodName: "GetSchema",
+			Handler:    _ConfigService_GetSchema_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -8,23 +8,29 @@ use pgapp_core::{
         ConfigStore,
     },
     db,
+    listen::MqListener,
     metrics::MetricsRegistry,
     mq::{MqLimits, MqStore, QueueStorageMode},
 };
 use pgapp_proto::pgapp::v1::{
-    AckMessageRequest, CacheItem, CacheStatsRequest, CacheStatsResponse, ConfigDraftResponse,
-    ConfigItem, ConfigRelease, ConfigScope, ConfigScopeSummary, CreateQueueRequest,
-    DeleteCacheRequest, DeleteConfigItemRequest, DropQueueRequest, ExistsCacheRequest,
+    AckMessageRequest, AppendRequest, AppendResponse, CacheItem, CacheStatsRequest,
+    CacheStatsResponse, ConfigDraftResponse, ConfigItem, ConfigRelease, ConfigSchemaResponse,
+    ConfigScope, ConfigScopeSummary, CreateQueueRequest, DecrementRequest, DecrementResponse,
+    DeleteCacheRequest, DeleteConfigItemRequest, DlqMessage, DropQueueRequest, ExistsCacheRequest,
     ExistsCacheResponse, GetCacheRequest, GetCacheResponse, GetConfigDraftRequest,
-    GetConfigReleaseRequest, HealthRequest, HealthResponse, InvalidateNamespaceRequest,
-    ListConfigReleasesRequest, ListConfigReleasesResponse, ListConfigScopesRequest,
-    ListConfigScopesResponse, MGetCacheRequest, MGetCacheResponse, MethodMetric, NamespaceUsage,
-    OperationResult, PgPoolMetrics, PublishConfigRequest, PurgeQueueRequest, QueueMessage,
-    QueueMetricsRequest, QueueMetricsResponse, QueueStorageMode as ProtoStorageMode,
-    ReadMessagesRequest, ReadMessagesResponse, ReadinessRequest, ReadinessResponse,
-    RuntimeMetricsRequest, RuntimeMetricsResponse, SendBatchRequest, SendBatchResponse,
-    SendMessageRequest, SendMessageResponse, ServiceCapability, ServiceState, SetCacheRequest,
-    SetVisibilityTimeoutRequest, UpsertConfigItemRequest, WatchConfigRequest, WatchConfigResponse,
+    GetConfigReleaseRequest, GetConfigSchemaRequest, GetDlqMessageRequest, GetSetRequest,
+    GetSetResponse, HealthRequest, HealthResponse, IncrementRequest, IncrementResponse,
+    InvalidateNamespaceRequest, ListConfigReleasesRequest, ListConfigReleasesResponse,
+    ListConfigScopesRequest, ListConfigScopesResponse, ListDlqMessagesRequest,
+    ListDlqMessagesResponse, MGetCacheRequest, MGetCacheResponse, MethodMetric, NamespaceUsage,
+    OperationResult, PgPoolMetrics, PrependRequest, PrependResponse, PublishConfigRequest,
+    PurgeDlqRequest, PurgeQueueRequest, QueueMessage, QueueMetricsRequest, QueueMetricsResponse,
+    QueueStorageMode as ProtoStorageMode, ReadMessagesRequest, ReadMessagesResponse,
+    ReadinessRequest, ReadinessResponse, ReprocessDlqMessageRequest, RuntimeMetricsRequest,
+    RuntimeMetricsResponse, SendBatchRequest, SendBatchResponse, SendMessageRequest,
+    SendMessageResponse, ServiceCapability, ServiceState, SetCacheRequest, SetConfigSchemaRequest,
+    SetNxRequest, SetNxResponse, SetVisibilityTimeoutRequest, StreamReadRequest,
+    UpsertConfigItemRequest, WatchConfigRequest, WatchConfigResponse,
     cache_service_server::{CacheService, CacheServiceServer},
     config_service_server::{ConfigService, ConfigServiceServer},
     health_service_server::{HealthService, HealthServiceServer},
@@ -33,11 +39,13 @@ use pgapp_proto::pgapp::v1::{
 use std::{
     future::Future,
     net::SocketAddr,
+    pin::Pin,
     time::{Duration, Instant},
 };
 use tonic::{Code, Request, Response, Status, transport::Server};
 
 mod admin_http;
+mod auth;
 
 #[derive(Clone)]
 struct CacheGrpc {
@@ -52,6 +60,8 @@ struct CacheGrpc {
 struct MqGrpc {
     store: MqStore,
     enabled: bool,
+    database_url: String,
+    notify_enabled: bool,
     metrics: MetricsRegistry,
     request_timeout: Duration,
 }
@@ -96,6 +106,7 @@ pub async fn serve(
             max_watch_seconds: cfg.limits.max_config_watch_seconds,
             max_payload_bytes: cfg.limits.max_payload_bytes,
             max_page_size: cfg.admin.max_page_size,
+            max_schema_bytes: cfg.max_schema_bytes,
         },
     );
     let mq_store = MqStore::with_limits(
@@ -105,8 +116,12 @@ pub async fn serve(
             max_batch_size: cfg.limits.max_batch_size,
             max_payload_bytes: cfg.limits.max_payload_bytes,
             max_visibility_timeout_seconds: cfg.limits.max_visibility_timeout_seconds,
+            max_redelivery_count: cfg.max_redelivery_count,
         },
     );
+    if cfg.dlq_retention_days > 0 {
+        spawn_dlq_sweeper(mq_store.clone(), cfg.dlq_retention_days);
+    }
     let cache = CacheGrpc {
         store: cache_store.clone(),
         enabled: cfg.services.cache,
@@ -117,6 +132,8 @@ pub async fn serve(
     let mq = MqGrpc {
         store: mq_store,
         enabled: cfg.services.mq,
+        database_url: cfg.database_url.clone(),
+        notify_enabled: cfg.notify_enabled,
         metrics: metrics.clone(),
         request_timeout,
     };
@@ -136,6 +153,11 @@ pub async fn serve(
     };
 
     let router = Server::builder()
+        .layer(auth::AuthLayer::new(
+            cfg.auth_enabled,
+            pgapp_core::client_auth::ClientStore::new(pool.clone()),
+            metrics.clone(),
+        ))
         .add_service(HealthServiceServer::new(health))
         .add_service(CacheServiceServer::new(cache))
         .add_service(MqServiceServer::new(mq))
@@ -353,6 +375,175 @@ impl CacheService for CacheGrpc {
         )
         .await
     }
+
+    async fn increment(
+        &self,
+        request: Request<IncrementRequest>,
+    ) -> Result<Response<IncrementResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "cache",
+            "increment",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                let value = self
+                    .store
+                    .increment(
+                        &req.namespace,
+                        &req.key,
+                        req.delta,
+                        ttl_from_proto(req.ttl_seconds)?,
+                    )
+                    .await?;
+                Ok(Response::new(IncrementResponse { value }))
+            },
+        )
+        .await
+    }
+
+    async fn decrement(
+        &self,
+        request: Request<DecrementRequest>,
+    ) -> Result<Response<DecrementResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "cache",
+            "decrement",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                let value = self
+                    .store
+                    .decrement(
+                        &req.namespace,
+                        &req.key,
+                        req.delta,
+                        ttl_from_proto(req.ttl_seconds)?,
+                    )
+                    .await?;
+                Ok(Response::new(DecrementResponse { value }))
+            },
+        )
+        .await
+    }
+
+    async fn set_nx(
+        &self,
+        request: Request<SetNxRequest>,
+    ) -> Result<Response<SetNxResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "cache",
+            "set_nx",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                validate_payload_bytes(req.value.len(), self.limits.max_payload_bytes)?;
+                let created = self
+                    .store
+                    .set_nx(
+                        &req.namespace,
+                        &req.key,
+                        &req.value,
+                        ttl_from_proto(req.ttl_seconds)?,
+                    )
+                    .await?;
+                Ok(Response::new(SetNxResponse { created }))
+            },
+        )
+        .await
+    }
+
+    async fn get_set(
+        &self,
+        request: Request<GetSetRequest>,
+    ) -> Result<Response<GetSetResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "cache",
+            "get_set",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                validate_payload_bytes(req.value.len(), self.limits.max_payload_bytes)?;
+                let old_value = self
+                    .store
+                    .get_set(
+                        &req.namespace,
+                        &req.key,
+                        &req.value,
+                        ttl_from_proto(req.ttl_seconds)?,
+                    )
+                    .await?;
+                Ok(Response::new(GetSetResponse {
+                    hit: old_value.is_some(),
+                    old_value: old_value.unwrap_or_default(),
+                }))
+            },
+        )
+        .await
+    }
+
+    async fn append(
+        &self,
+        request: Request<AppendRequest>,
+    ) -> Result<Response<AppendResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "cache",
+            "append",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                validate_payload_bytes(req.value.len(), self.limits.max_payload_bytes)?;
+                let length = self
+                    .store
+                    .append(
+                        &req.namespace,
+                        &req.key,
+                        &req.value,
+                        ttl_from_proto(req.ttl_seconds)?,
+                    )
+                    .await?;
+                Ok(Response::new(AppendResponse { length }))
+            },
+        )
+        .await
+    }
+
+    async fn prepend(
+        &self,
+        request: Request<PrependRequest>,
+    ) -> Result<Response<PrependResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "cache",
+            "prepend",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                validate_payload_bytes(req.value.len(), self.limits.max_payload_bytes)?;
+                let length = self
+                    .store
+                    .prepend(
+                        &req.namespace,
+                        &req.key,
+                        &req.value,
+                        ttl_from_proto(req.ttl_seconds)?,
+                    )
+                    .await?;
+                Ok(Response::new(PrependResponse { length }))
+            },
+        )
+        .await
+    }
 }
 
 impl CacheGrpc {
@@ -367,6 +558,9 @@ impl CacheGrpc {
 
 #[tonic::async_trait]
 impl MqService for MqGrpc {
+    type StreamReadStream =
+        Pin<Box<dyn futures::Stream<Item = Result<ReadMessagesResponse, Status>> + Send + 'static>>;
+
     async fn create_queue(
         &self,
         request: Request<CreateQueueRequest>,
@@ -512,16 +706,28 @@ impl MqService for MqGrpc {
             async {
                 self.ensure_enabled()?;
                 let req = request.into_inner();
-                let messages = self
-                    .store
-                    .read_with_poll(
-                        &req.queue_name,
+                let messages = if self.notify_enabled {
+                    read_with_notify_or_poll(
+                        self.store.clone(),
+                        self.database_url.clone(),
+                        req.queue_name.clone(),
                         req.quantity,
                         req.visibility_timeout_seconds,
                         req.max_poll_seconds,
                         req.poll_interval_millis,
                     )
-                    .await?;
+                    .await?
+                } else {
+                    self.store
+                        .read_with_poll(
+                            &req.queue_name,
+                            req.quantity,
+                            req.visibility_timeout_seconds,
+                            req.max_poll_seconds,
+                            req.poll_interval_millis,
+                        )
+                        .await?
+                };
                 Ok(Response::new(ReadMessagesResponse {
                     messages: messages.into_iter().map(to_proto_message).collect(),
                 }))
@@ -619,10 +825,134 @@ impl MqService for MqGrpc {
                     in_flight_message_count: metrics.in_flight_message_count,
                     oldest_visible_message_age_seconds: metrics.oldest_visible_message_age_seconds,
                     archived_message_count: metrics.archived_message_count,
+                    dlq_message_count: metrics.dlq_message_count,
                 }))
             },
         )
         .await
+    }
+
+    async fn list_dlq_messages(
+        &self,
+        request: Request<ListDlqMessagesRequest>,
+    ) -> Result<Response<ListDlqMessagesResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "mq",
+            "list_dlq_messages",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                let page = self
+                    .store
+                    .list_dlq_messages(&req.queue_name, req.limit as i64, req.offset)
+                    .await?;
+                Ok(Response::new(ListDlqMessagesResponse {
+                    messages: page
+                        .messages
+                        .into_iter()
+                        .map(to_proto_dlq_message)
+                        .collect(),
+                    next_offset: page.next_offset.unwrap_or_default(),
+                }))
+            },
+        )
+        .await
+    }
+
+    async fn get_dlq_message(
+        &self,
+        request: Request<GetDlqMessageRequest>,
+    ) -> Result<Response<DlqMessage>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "mq",
+            "get_dlq_message",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                let message = self
+                    .store
+                    .get_dlq_message(&req.queue_name, req.original_message_id)
+                    .await?;
+                Ok(Response::new(to_proto_dlq_message(message)))
+            },
+        )
+        .await
+    }
+
+    async fn reprocess_dlq_message(
+        &self,
+        request: Request<ReprocessDlqMessageRequest>,
+    ) -> Result<Response<OperationResult>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "mq",
+            "reprocess_dlq_message",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                let success = self
+                    .store
+                    .reprocess_dlq_message(&req.queue_name, req.original_message_id)
+                    .await?;
+                Ok(Response::new(OperationResult { success }))
+            },
+        )
+        .await
+    }
+
+    async fn purge_dlq(
+        &self,
+        request: Request<PurgeDlqRequest>,
+    ) -> Result<Response<OperationResult>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "mq",
+            "purge_dlq",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                self.store.purge_dlq(&req.queue_name).await?;
+                Ok(Response::new(OperationResult { success: true }))
+            },
+        )
+        .await
+    }
+
+    async fn stream_read(
+        &self,
+        request: Request<StreamReadRequest>,
+    ) -> Result<Response<Self::StreamReadStream>, Status> {
+        self.ensure_enabled()?;
+        let req = request.into_inner();
+        let listener = if self.notify_enabled {
+            match MqListener::connect(&self.database_url, &req.queue_name).await {
+                Ok(listener) => Some(listener),
+                Err(err) => {
+                    tracing::warn!(queue = %req.queue_name, error = %err, "mq stream LISTEN unavailable; falling back to polling");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let state = StreamReadState {
+            store: self.store.clone(),
+            listener,
+            queue_name: req.queue_name,
+            quantity: req.quantity,
+            visibility_timeout_seconds: req.visibility_timeout_seconds,
+            poll_interval: Duration::from_millis(100),
+        };
+        Ok(Response::new(Box::pin(futures::stream::unfold(
+            state,
+            stream_read_next,
+        ))))
     }
 }
 
@@ -632,6 +962,113 @@ impl MqGrpc {
             Ok(())
         } else {
             Err(Status::unavailable("mq service is disabled"))
+        }
+    }
+}
+
+struct StreamReadState {
+    store: MqStore,
+    listener: Option<MqListener>,
+    queue_name: String,
+    quantity: i32,
+    visibility_timeout_seconds: i64,
+    poll_interval: Duration,
+}
+
+async fn stream_read_next(
+    mut state: StreamReadState,
+) -> Option<(Result<ReadMessagesResponse, Status>, StreamReadState)> {
+    loop {
+        match state
+            .store
+            .read(
+                &state.queue_name,
+                state.quantity,
+                state.visibility_timeout_seconds,
+            )
+            .await
+        {
+            Ok(messages) if !messages.is_empty() => {
+                return Some((
+                    Ok(ReadMessagesResponse {
+                        messages: messages.into_iter().map(to_proto_message).collect(),
+                    }),
+                    state,
+                ));
+            }
+            Ok(_) => {}
+            Err(err) => return Some((Err(err.into()), state)),
+        }
+
+        if let Some(listener) = state.listener.as_mut() {
+            match tokio::time::timeout(state.poll_interval, listener.recv()).await {
+                Ok(Ok(_notification)) => {}
+                Ok(Err(err)) => {
+                    tracing::warn!(queue = %state.queue_name, error = %err, "mq stream LISTEN failed; falling back to polling");
+                    state.listener = None;
+                    tokio::time::sleep(state.poll_interval).await;
+                }
+                Err(_) => {}
+            }
+        } else {
+            tokio::time::sleep(state.poll_interval).await;
+        }
+    }
+}
+
+async fn read_with_notify_or_poll(
+    store: MqStore,
+    database_url: String,
+    queue_name: String,
+    quantity: i32,
+    visibility_timeout_seconds: i64,
+    max_poll_seconds: i64,
+    poll_interval_millis: i64,
+) -> Result<Vec<pgapp_core::mq::QueueMessage>, PgAppError> {
+    if max_poll_seconds < 0 {
+        return Err(PgAppError::InvalidArgument(
+            "max_poll_seconds must not be negative".to_string(),
+        ));
+    }
+    let poll_interval = if poll_interval_millis <= 0 {
+        Duration::from_millis(100)
+    } else {
+        Duration::from_millis(poll_interval_millis as u64)
+    };
+    let deadline = Instant::now() + Duration::from_secs(max_poll_seconds as u64);
+    let mut listener = match MqListener::connect(&database_url, &queue_name).await {
+        Ok(listener) => Some(listener),
+        Err(err) => {
+            tracing::warn!(queue = %queue_name, error = %err, "mq long poll LISTEN unavailable; falling back to polling");
+            None
+        }
+    };
+
+    loop {
+        let messages = store
+            .read(&queue_name, quantity, visibility_timeout_seconds)
+            .await?;
+        if !messages.is_empty() || Instant::now() >= deadline {
+            return Ok(messages);
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let wait = remaining.min(poll_interval);
+        if wait.is_zero() {
+            return Ok(Vec::new());
+        }
+
+        if let Some(active_listener) = listener.as_mut() {
+            match tokio::time::timeout(wait, active_listener.recv()).await {
+                Ok(Ok(_notification)) => {}
+                Ok(Err(err)) => {
+                    tracing::warn!(queue = %queue_name, error = %err, "mq long poll LISTEN failed; falling back to polling");
+                    listener = None;
+                    tokio::time::sleep(wait).await;
+                }
+                Err(_) => {}
+            }
+        } else {
+            tokio::time::sleep(wait).await;
         }
     }
 }
@@ -839,6 +1276,55 @@ impl ConfigService for ConfigGrpc {
         )
         .await
     }
+
+    async fn set_schema(
+        &self,
+        request: Request<SetConfigSchemaRequest>,
+    ) -> Result<Response<OperationResult>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "config",
+            "set_schema",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                let scope = required_scope(req.scope)?;
+                let schema = if req.json_schema.trim().is_empty() {
+                    None
+                } else {
+                    Some(parse_config_json(&req.json_schema)?)
+                };
+                self.store.set_schema(&scope, schema).await?;
+                Ok(Response::new(OperationResult { success: true }))
+            },
+        )
+        .await
+    }
+
+    async fn get_schema(
+        &self,
+        request: Request<GetConfigSchemaRequest>,
+    ) -> Result<Response<ConfigSchemaResponse>, Status> {
+        record_rpc(
+            self.metrics.clone(),
+            "config",
+            "get_schema",
+            self.request_timeout,
+            async {
+                self.ensure_enabled()?;
+                let req = request.into_inner();
+                let scope = required_scope(req.scope)?;
+                let schema = self.store.get_schema(&scope).await?;
+                Ok(Response::new(ConfigSchemaResponse {
+                    scope: Some(to_proto_scope(scope)),
+                    has_schema: schema.is_some(),
+                    json_schema: schema.map(|schema| schema.to_string()).unwrap_or_default(),
+                }))
+            },
+        )
+        .await
+    }
 }
 
 impl ConfigGrpc {
@@ -994,6 +1480,18 @@ fn to_proto_message(message: pgapp_core::mq::QueueMessage) -> QueueMessage {
     }
 }
 
+fn to_proto_dlq_message(message: pgapp_core::mq::DlqMessage) -> DlqMessage {
+    DlqMessage {
+        id: message.id,
+        original_message_id: message.original_message_id,
+        read_count: message.read_count,
+        enqueued_at: message.enqueued_at.to_rfc3339(),
+        dead_lettered_at: message.dead_lettered_at.to_rfc3339(),
+        json_payload: message.payload.to_string(),
+        reason: message.reason,
+    }
+}
+
 fn required_scope(scope: Option<ConfigScope>) -> Result<CoreConfigScope, Status> {
     let scope = scope.ok_or_else(|| Status::invalid_argument("scope is required"))?;
     Ok(CoreConfigScope {
@@ -1086,6 +1584,16 @@ fn validate_payload_bytes(len: usize, max: usize) -> Result<(), Status> {
     Ok(())
 }
 
+fn ttl_from_proto(ttl_seconds: i64) -> Result<Option<i64>, Status> {
+    if ttl_seconds > 0 {
+        Ok(Some(ttl_seconds))
+    } else if ttl_seconds == 0 {
+        Ok(None)
+    } else {
+        Err(PgAppError::InvalidArgument("ttl_seconds must not be negative".to_string()).into())
+    }
+}
+
 fn validate_batch_len(len: usize, max: i32) -> Result<(), Status> {
     if len > max as usize {
         return Err(PgAppError::InvalidArgument(format!(
@@ -1094,6 +1602,18 @@ fn validate_batch_len(len: usize, max: i32) -> Result<(), Status> {
         .into());
     }
     Ok(())
+}
+
+fn spawn_dlq_sweeper(store: MqStore, retention_days: i64) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
+        loop {
+            interval.tick().await;
+            if let Err(err) = store.sweep_dlq(retention_days).await {
+                tracing::warn!(%err, "DLQ retention sweep failed");
+            }
+        }
+    });
 }
 
 fn u128_to_u64(value: u128) -> u64 {

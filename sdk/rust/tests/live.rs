@@ -1,4 +1,4 @@
-use pgapp_core::{config::ServerConfig, db};
+use pgapp_core::{client_auth::ClientStore, config::ServerConfig, db};
 use pgapp_proto::pgapp::v1::{
     PublishConfigRequest, UpsertConfigItemRequest,
     config_service_client::ConfigServiceClient as GeneratedConfigClient,
@@ -16,16 +16,21 @@ use tonic::Code;
 static NEXT_ID: AtomicU64 = AtomicU64::new(20_000);
 
 async fn spawn_server() -> Option<String> {
+    spawn_server_with_env(HashMap::new()).await
+}
+
+async fn spawn_server_with_env(extra_env: HashMap<String, String>) -> Option<String> {
     let database_url = std::env::var("DATABASE_URL").ok()?;
     let pool = db::connect(&database_url, 1, 5).await.ok()?;
     db::apply_schema(&pool).await.ok()?;
     let addr = free_addr();
-    let cfg = ServerConfig::from_map(HashMap::from([
+    let mut cfg_map = HashMap::from([
         ("DATABASE_URL".to_string(), database_url),
         ("PGAPP_BIND_ADDR".to_string(), addr.to_string()),
         ("PGAPP_MAX_CONNECTIONS".to_string(), "5".to_string()),
-    ]))
-    .ok()?;
+    ]);
+    cfg_map.extend(extra_env);
+    let cfg = ServerConfig::from_map(cfg_map).ok()?;
     tokio::spawn(async move {
         let _ = pgapp_server::serve(addr, pool, cfg).await;
     });
@@ -37,6 +42,18 @@ async fn spawn_server() -> Option<String> {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     None
+}
+
+async fn create_client_credentials() -> Option<(String, String)> {
+    let database_url = std::env::var("DATABASE_URL").ok()?;
+    let pool = db::connect(&database_url, 1, 5).await.ok()?;
+    db::apply_schema(&pool).await.ok()?;
+    let key = unique("rust_sdk_auth_client");
+    let created = ClientStore::new(pool)
+        .create_client(&key, vec!["cache".to_string(), "mq".to_string()])
+        .await
+        .ok()?;
+    Some((created.client_key, created.secret))
 }
 
 fn free_addr() -> SocketAddr {
@@ -213,4 +230,144 @@ async fn rust_sdk_preserves_error_status() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn rust_sdk_phase_two_cache_mq_dlq_and_stream_surface() {
+    let Some(endpoint) = spawn_server_with_env(HashMap::from([(
+        "PGAPP_MAX_REDELIVERY_COUNT".to_string(),
+        "1".to_string(),
+    )]))
+    .await
+    else {
+        eprintln!("skipping SDK live test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let client = PgAppClient::connect(endpoint).await.unwrap();
+
+    let namespace = unique("rust_sdk_phase_two_cache");
+    let mut cache = client.cache();
+    assert_eq!(
+        cache
+            .increment(&namespace, "counter", 2, Some(60))
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        cache
+            .decrement(&namespace, "counter", 1, None)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(
+        cache
+            .set_nx(&namespace, "lock", b"first".to_vec(), Some(60))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !cache
+            .set_nx(&namespace, "lock", b"second".to_vec(), Some(60))
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        cache
+            .get_set(&namespace, "slot", b"new".to_vec(), Some(60))
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        cache
+            .get_set(&namespace, "slot", b"newer".to_vec(), Some(60))
+            .await
+            .unwrap(),
+        Some(b"new".to_vec())
+    );
+    assert_eq!(
+        cache
+            .append(&namespace, "log", b"tail".to_vec(), None)
+            .await
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        cache
+            .prepend(&namespace, "log", b"head-".to_vec(), None)
+            .await
+            .unwrap(),
+        9
+    );
+
+    let queue = unique("rust_sdk_phase_two_orders");
+    let mut mq = client.mq();
+    assert!(mq.create_queue(&queue).await.unwrap());
+    let poison_id = mq
+        .send_json(&queue, &json!({"poison": true}))
+        .await
+        .unwrap();
+    let first = mq.read(&queue, 1, 0).await.unwrap().remove(0);
+    assert_eq!(first.message_id, poison_id);
+    assert!(mq.read(&queue, 1, 0).await.unwrap().is_empty());
+    let dlq = mq.list_dlq_messages(&queue, 10, 0).await.unwrap();
+    assert_eq!(dlq.len(), 1);
+    assert_eq!(
+        mq.get_dlq_message(&queue, poison_id)
+            .await
+            .unwrap()
+            .original_message_id,
+        poison_id
+    );
+    assert!(mq.reprocess_dlq_message(&queue, poison_id).await.unwrap());
+    assert!(mq.purge_dlq(&queue).await.unwrap());
+
+    let stream_queue = unique("rust_sdk_stream_orders");
+    assert!(mq.create_queue(&stream_queue).await.unwrap());
+    let mut stream = mq.stream_read(&stream_queue, 1, 30).await.unwrap();
+    let sent = mq
+        .send_json(&stream_queue, &json!({"stream": true}))
+        .await
+        .unwrap();
+    let pushed = tokio::time::timeout(Duration::from_secs(2), stream.message())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(pushed.messages[0].message_id, sent);
+}
+
+#[tokio::test]
+async fn rust_sdk_attaches_auth_credentials() {
+    let Some((key, secret)) = create_client_credentials().await else {
+        eprintln!("skipping SDK live test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let Some(endpoint) = spawn_server_with_env(HashMap::from([(
+        "PGAPP_ENABLE_AUTH".to_string(),
+        "true".to_string(),
+    )]))
+    .await
+    else {
+        eprintln!("skipping SDK live test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+
+    let plain = PgAppClient::connect(endpoint.clone()).await.unwrap();
+    let mut plain_cache = plain.cache();
+    let err = plain_cache.get("authsdk", "missing").await.unwrap_err();
+    assert_eq!(err.code(), Code::Unauthenticated);
+
+    let authed = PgAppClient::connect_with_timeout_and_credentials(
+        endpoint,
+        Some(Duration::from_secs(3)),
+        key,
+        secret,
+    )
+    .await
+    .unwrap();
+    let mut cache = authed.cache();
+    assert_eq!(cache.get("authsdk", "missing").await.unwrap(), None);
 }

@@ -59,13 +59,7 @@ impl CacheStore {
     ) -> PgAppResult<()> {
         validate_namespace(namespace)?;
         validate_cache_key(key)?;
-        if let Some(ttl) = ttl_seconds {
-            if ttl <= 0 {
-                return Err(PgAppError::InvalidArgument(
-                    "ttl_seconds must be positive when provided".to_string(),
-                ));
-            }
-        }
+        validate_ttl_seconds(ttl_seconds)?;
         self.ensure_namespace(namespace).await?;
         let generation = self.namespace_generation(namespace).await?;
         let key_hash = hash_key(key);
@@ -110,6 +104,146 @@ impl CacheStore {
         self.increment_counter("writes", 1).await?;
         self.enforce_capacity(namespace).await?;
         Ok(())
+    }
+
+    pub async fn increment(
+        &self,
+        namespace: &str,
+        key: &str,
+        delta: i64,
+        ttl_seconds: Option<i64>,
+    ) -> PgAppResult<i64> {
+        self.add_integer(namespace, key, delta, ttl_seconds).await
+    }
+
+    pub async fn decrement(
+        &self,
+        namespace: &str,
+        key: &str,
+        delta: i64,
+        ttl_seconds: Option<i64>,
+    ) -> PgAppResult<i64> {
+        let delta = delta.checked_neg().ok_or_else(|| {
+            PgAppError::InvalidArgument("delta is too large to decrement".to_string())
+        })?;
+        self.add_integer(namespace, key, delta, ttl_seconds).await
+    }
+
+    pub async fn set_nx(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &[u8],
+        ttl_seconds: Option<i64>,
+    ) -> PgAppResult<bool> {
+        validate_namespace(namespace)?;
+        validate_cache_key(key)?;
+        validate_ttl_seconds(ttl_seconds)?;
+        self.ensure_namespace(namespace).await?;
+        let generation = self.namespace_generation(namespace).await?;
+        let key_hash = hash_key(key);
+        let mut tx = self.pool.begin().await?;
+        delete_expired_key(&mut tx, namespace, generation, &key_hash, key).await?;
+        let created = sqlx::query(
+            r#"
+            INSERT INTO cache_entries(
+              namespace, generation, key_hash, cache_key, value_bytes, expires_at, size_bytes
+            )
+            VALUES (
+              $1,
+              $2,
+              $3,
+              $4,
+              $5,
+              CASE
+                WHEN $6::bigint IS NULL THEN NULL
+                ELSE now() + ($6::double precision * interval '1 second')
+              END,
+              $7
+            )
+            ON CONFLICT (namespace, generation, key_hash) DO NOTHING
+            "#,
+        )
+        .bind(namespace)
+        .bind(generation)
+        .bind(&key_hash)
+        .bind(key)
+        .bind(value)
+        .bind(ttl_seconds)
+        .bind(value.len() as i64)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+            > 0;
+        tx.commit().await?;
+        if created {
+            self.increment_counter("writes", 1).await?;
+            self.enforce_capacity(namespace).await?;
+        }
+        Ok(created)
+    }
+
+    pub async fn get_set(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &[u8],
+        ttl_seconds: Option<i64>,
+    ) -> PgAppResult<Option<Vec<u8>>> {
+        validate_namespace(namespace)?;
+        validate_cache_key(key)?;
+        validate_ttl_seconds(ttl_seconds)?;
+        self.ensure_namespace(namespace).await?;
+        let generation = self.namespace_generation(namespace).await?;
+        let key_hash = hash_key(key);
+        let mut tx = self.pool.begin().await?;
+        lock_key_for_atomic_write(&mut tx, namespace, generation, &key_hash).await?;
+        delete_expired_key(&mut tx, namespace, generation, &key_hash, key).await?;
+        let row = select_key_for_update(&mut tx, namespace, generation, &key_hash, key).await?;
+        let old_value = if let Some(row) = row {
+            let id: i64 = row.try_get("id")?;
+            let old_value: Vec<u8> = row.try_get("value_bytes")?;
+            update_value(&mut tx, id, value, ttl_seconds, false).await?;
+            Some(old_value)
+        } else {
+            insert_value(
+                &mut tx,
+                namespace,
+                generation,
+                &key_hash,
+                key,
+                value,
+                ttl_seconds,
+            )
+            .await?;
+            None
+        };
+        tx.commit().await?;
+        self.increment_counter("writes", 1).await?;
+        self.enforce_capacity(namespace).await?;
+        Ok(old_value)
+    }
+
+    pub async fn append(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &[u8],
+        ttl_seconds: Option<i64>,
+    ) -> PgAppResult<i64> {
+        self.concat(namespace, key, value, ttl_seconds, ConcatPosition::Append)
+            .await
+    }
+
+    pub async fn prepend(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &[u8],
+        ttl_seconds: Option<i64>,
+    ) -> PgAppResult<i64> {
+        self.concat(namespace, key, value, ttl_seconds, ConcatPosition::Prepend)
+            .await
     }
 
     pub async fn get(&self, namespace: &str, key: &str) -> PgAppResult<Option<Vec<u8>>> {
@@ -437,6 +571,274 @@ impl CacheStore {
         sqlx::query(sql).bind(amount).execute(&self.pool).await?;
         Ok(())
     }
+
+    async fn add_integer(
+        &self,
+        namespace: &str,
+        key: &str,
+        delta: i64,
+        ttl_seconds: Option<i64>,
+    ) -> PgAppResult<i64> {
+        validate_namespace(namespace)?;
+        validate_cache_key(key)?;
+        validate_ttl_seconds(ttl_seconds)?;
+        self.ensure_namespace(namespace).await?;
+        let generation = self.namespace_generation(namespace).await?;
+        let key_hash = hash_key(key);
+        let mut tx = self.pool.begin().await?;
+        lock_key_for_atomic_write(&mut tx, namespace, generation, &key_hash).await?;
+        delete_expired_key(&mut tx, namespace, generation, &key_hash, key).await?;
+        let row = select_key_for_update(&mut tx, namespace, generation, &key_hash, key).await?;
+        let new_value = if let Some(row) = row {
+            let id: i64 = row.try_get("id")?;
+            let current = parse_i64_value(row.try_get("value_bytes")?)?;
+            let new_value = current.checked_add(delta).ok_or_else(|| {
+                PgAppError::InvalidArgument("numeric cache value overflowed i64".to_string())
+            })?;
+            update_value(
+                &mut tx,
+                id,
+                new_value.to_string().as_bytes(),
+                ttl_seconds,
+                true,
+            )
+            .await?;
+            new_value
+        } else {
+            insert_value(
+                &mut tx,
+                namespace,
+                generation,
+                &key_hash,
+                key,
+                delta.to_string().as_bytes(),
+                ttl_seconds,
+            )
+            .await?;
+            delta
+        };
+        tx.commit().await?;
+        self.increment_counter("writes", 1).await?;
+        self.enforce_capacity(namespace).await?;
+        Ok(new_value)
+    }
+
+    async fn concat(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &[u8],
+        ttl_seconds: Option<i64>,
+        position: ConcatPosition,
+    ) -> PgAppResult<i64> {
+        validate_namespace(namespace)?;
+        validate_cache_key(key)?;
+        validate_ttl_seconds(ttl_seconds)?;
+        self.ensure_namespace(namespace).await?;
+        let generation = self.namespace_generation(namespace).await?;
+        let key_hash = hash_key(key);
+        let mut tx = self.pool.begin().await?;
+        lock_key_for_atomic_write(&mut tx, namespace, generation, &key_hash).await?;
+        delete_expired_key(&mut tx, namespace, generation, &key_hash, key).await?;
+        let row = select_key_for_update(&mut tx, namespace, generation, &key_hash, key).await?;
+        let new_value = if let Some(row) = row {
+            let id: i64 = row.try_get("id")?;
+            let old_value: Vec<u8> = row.try_get("value_bytes")?;
+            let mut new_value = Vec::with_capacity(old_value.len() + value.len());
+            match position {
+                ConcatPosition::Append => {
+                    new_value.extend_from_slice(&old_value);
+                    new_value.extend_from_slice(value);
+                }
+                ConcatPosition::Prepend => {
+                    new_value.extend_from_slice(value);
+                    new_value.extend_from_slice(&old_value);
+                }
+            }
+            update_value(&mut tx, id, &new_value, ttl_seconds, false).await?;
+            new_value
+        } else {
+            insert_value(
+                &mut tx,
+                namespace,
+                generation,
+                &key_hash,
+                key,
+                value,
+                ttl_seconds,
+            )
+            .await?;
+            value.to_vec()
+        };
+        tx.commit().await?;
+        self.increment_counter("writes", 1).await?;
+        self.enforce_capacity(namespace).await?;
+        Ok(new_value.len() as i64)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConcatPosition {
+    Append,
+    Prepend,
+}
+
+fn validate_ttl_seconds(ttl_seconds: Option<i64>) -> PgAppResult<()> {
+    if let Some(ttl) = ttl_seconds {
+        if ttl <= 0 {
+            return Err(PgAppError::InvalidArgument(
+                "ttl_seconds must be positive when provided".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_i64_value(value: Vec<u8>) -> PgAppResult<i64> {
+    let text = std::str::from_utf8(&value)
+        .map_err(|_| PgAppError::InvalidArgument("cache value is not a numeric i64".to_string()))?;
+    text.parse::<i64>()
+        .map_err(|_| PgAppError::InvalidArgument("cache value is not a numeric i64".to_string()))
+}
+
+async fn delete_expired_key(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    namespace: &str,
+    generation: i64,
+    key_hash: &str,
+    key: &str,
+) -> PgAppResult<()> {
+    sqlx::query(
+        r#"
+        DELETE FROM cache_entries
+        WHERE namespace = $1
+          AND generation = $2
+          AND key_hash = $3
+          AND cache_key = $4
+          AND expires_at IS NOT NULL
+          AND expires_at <= now()
+        "#,
+    )
+    .bind(namespace)
+    .bind(generation)
+    .bind(key_hash)
+    .bind(key)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn select_key_for_update(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    namespace: &str,
+    generation: i64,
+    key_hash: &str,
+    key: &str,
+) -> PgAppResult<Option<sqlx::postgres::PgRow>> {
+    let row = sqlx::query(
+        r#"
+        SELECT id, value_bytes
+        FROM cache_entries
+        WHERE namespace = $1
+          AND generation = $2
+          AND key_hash = $3
+          AND cache_key = $4
+          AND (expires_at IS NULL OR expires_at > now())
+        FOR UPDATE
+        "#,
+    )
+    .bind(namespace)
+    .bind(generation)
+    .bind(key_hash)
+    .bind(key)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row)
+}
+
+async fn lock_key_for_atomic_write(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    namespace: &str,
+    generation: i64,
+    key_hash: &str,
+) -> PgAppResult<()> {
+    let lock_key = format!("{namespace}:{generation}:{key_hash}");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(lock_key)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn insert_value(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    namespace: &str,
+    generation: i64,
+    key_hash: &str,
+    key: &str,
+    value: &[u8],
+    ttl_seconds: Option<i64>,
+) -> PgAppResult<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO cache_entries(
+          namespace, generation, key_hash, cache_key, value_bytes, expires_at, size_bytes
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          CASE
+            WHEN $6::bigint IS NULL THEN NULL
+            ELSE now() + ($6::double precision * interval '1 second')
+          END,
+          $7
+        )
+        "#,
+    )
+    .bind(namespace)
+    .bind(generation)
+    .bind(key_hash)
+    .bind(key)
+    .bind(value)
+    .bind(ttl_seconds)
+    .bind(value.len() as i64)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn update_value(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: i64,
+    value: &[u8],
+    ttl_seconds: Option<i64>,
+    preserve_expiry_when_unset: bool,
+) -> PgAppResult<()> {
+    sqlx::query(
+        r#"
+        UPDATE cache_entries
+        SET value_bytes = $2,
+            size_bytes = $3,
+            expires_at = CASE
+              WHEN $4::bigint IS NULL AND $5::boolean THEN expires_at
+              WHEN $4::bigint IS NULL THEN NULL
+              ELSE now() + ($4::double precision * interval '1 second')
+            END,
+            updated_at = now()
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .bind(value)
+    .bind(value.len() as i64)
+    .bind(ttl_seconds)
+    .bind(preserve_expiry_when_unset)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

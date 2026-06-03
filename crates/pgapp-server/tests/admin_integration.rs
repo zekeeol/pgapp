@@ -1,9 +1,10 @@
 use pgapp_core::{
     cache::{CacheLimits, CacheStore},
+    client_auth::ClientStore,
     config::ServerConfig,
     config_center::{ConfigLimits, ConfigScope, ConfigStore},
     db,
-    mq::{MqStore, QueueStorageMode},
+    mq::{MqLimits, MqStore, QueueStorageMode},
 };
 use reqwest::{StatusCode, header};
 use serde_json::Value;
@@ -362,6 +363,135 @@ async fn admin_mq_routes_are_read_only() {
 }
 
 #[tokio::test]
+async fn admin_mq_dlq_routes_inspect_reprocess_and_purge_messages() {
+    let (grpc_addr, admin_addr) = free_distinct_addrs();
+    let token = "mq-dlq-admin-token";
+    let Some((admin_endpoint, pool)) = spawn_server_with_env(
+        grpc_addr,
+        admin_addr,
+        HashMap::from([
+            ("PGAPP_ENABLE_ADMIN".to_string(), "true".to_string()),
+            ("PGAPP_ADMIN_BIND_ADDR".to_string(), admin_addr.to_string()),
+            ("PGAPP_ADMIN_TOKEN".to_string(), token.to_string()),
+            ("PGAPP_MAX_REDELIVERY_COUNT".to_string(), "1".to_string()),
+        ]),
+    )
+    .await
+    else {
+        eprintln!("skipping Admin integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let queue = unique("admin_http_mq_dlq");
+    let mq = MqStore::with_limits(
+        pool.clone(),
+        false,
+        MqLimits {
+            max_redelivery_count: 1,
+            ..MqLimits::default()
+        },
+    );
+    mq.create_queue(&queue, QueueStorageMode::Durable)
+        .await
+        .unwrap();
+    let message_id = mq.send(&queue, r#"{"poison":true}"#, 0).await.unwrap();
+    let read = mq.read(&queue, 1, 30).await.unwrap().remove(0);
+    mq.set_visibility_timeout(&queue, read.id, &read.ack_token, 0)
+        .await
+        .unwrap();
+    assert!(mq.read(&queue, 1, 30).await.unwrap().is_empty());
+
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .unwrap();
+    assert!(
+        wait_for_http(&client, &format!("{admin_endpoint}/api/admin/overview")).await,
+        "Admin HTTP listener did not start"
+    );
+
+    let dlq: Value = client
+        .get(format!("{admin_endpoint}/api/admin/mq/queues/{queue}/dlq"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(dlq["items"][0]["original_message_id"], message_id);
+    assert_eq!(dlq["items"][0]["read_count"], 1);
+    assert_eq!(dlq["items"][0]["payload"]["poison"], true);
+    assert!(
+        dlq["items"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("max_redelivery_count")
+    );
+
+    let fetched: Value = client
+        .get(format!(
+            "{admin_endpoint}/api/admin/mq/queues/{queue}/dlq/{message_id}"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(fetched["original_message_id"], message_id);
+    assert_eq!(fetched["payload"]["poison"], true);
+
+    let reprocessed: Value = client
+        .post(format!(
+            "{admin_endpoint}/api/admin/mq/queues/{queue}/dlq/{message_id}/reprocess"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(reprocessed["success"], true);
+    assert_eq!(
+        mq.list_dlq_messages(&queue, 10, 0)
+            .await
+            .unwrap()
+            .messages
+            .len(),
+        0
+    );
+    let active = mq.read(&queue, 1, 30).await.unwrap().remove(0);
+    assert_eq!(active.id, message_id);
+    assert_eq!(active.read_count, 1);
+    mq.dead_letter(&queue, message_id, "admin purge test")
+        .await
+        .unwrap();
+
+    let purged: Value = client
+        .post(format!(
+            "{admin_endpoint}/api/admin/mq/queues/{queue}/dlq/purge"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(purged["deleted_count"], 1);
+    assert!(
+        mq.list_dlq_messages(&queue, 10, 0)
+            .await
+            .unwrap()
+            .messages
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn admin_config_routes_are_token_protected_and_manage_drafts() {
     let (grpc_addr, admin_addr) = free_distinct_addrs();
     let token = "config-admin-token";
@@ -470,6 +600,111 @@ async fn admin_config_routes_are_token_protected_and_manage_drafts() {
         .await
         .unwrap();
     assert_eq!(invalid["code"], "invalid_argument");
+}
+
+#[tokio::test]
+async fn admin_config_schema_routes_set_get_validate_and_remove_schema() {
+    let (grpc_addr, admin_addr) = free_distinct_addrs();
+    let token = "config-schema-admin-token";
+    let Some((admin_endpoint, _pool)) = spawn_server_with_env(
+        grpc_addr,
+        admin_addr,
+        HashMap::from([
+            ("PGAPP_ENABLE_ADMIN".to_string(), "true".to_string()),
+            ("PGAPP_ADMIN_BIND_ADDR".to_string(), admin_addr.to_string()),
+            ("PGAPP_ADMIN_TOKEN".to_string(), token.to_string()),
+        ]),
+    )
+    .await
+    else {
+        eprintln!("skipping Admin integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let scope = serde_json::json!({
+        "app_id": unique("admin_schema_config"),
+        "environment": "prod",
+        "cluster": "default",
+        "namespace": "application"
+    });
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .unwrap();
+    assert!(
+        wait_for_http(&client, &format!("{admin_endpoint}/api/admin/overview")).await,
+        "Admin HTTP listener did not start"
+    );
+
+    let schema = serde_json::json!({
+        "type": "object",
+        "required": ["port"],
+        "properties": {"port": {"type": "integer"}}
+    });
+    let set: Value = client
+        .put(format!("{admin_endpoint}/api/admin/config/schema"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "scope": scope, "schema": schema }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(set["success"], true);
+
+    let query = format!(
+        "app_id={}&environment=prod&cluster=default&namespace=application",
+        scope["app_id"].as_str().unwrap()
+    );
+    let fetched: Value = client
+        .get(format!("{admin_endpoint}/api/admin/config/schema?{query}"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(fetched["has_schema"], true);
+    assert_eq!(fetched["schema"]["required"][0], "port");
+
+    let invalid_item = client
+        .put(format!("{admin_endpoint}/api/admin/config/items"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "scope": scope,
+            "key": "db",
+            "value": {"port": "5432"}
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid_item.status(), StatusCode::BAD_REQUEST);
+    let invalid_body: Value = invalid_item.json().await.unwrap();
+    assert_eq!(invalid_body["code"], "invalid_argument");
+
+    let removed: Value = client
+        .delete(format!("{admin_endpoint}/api/admin/config/schema?{query}"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(removed["success"], true);
+
+    let no_schema: Value = client
+        .get(format!("{admin_endpoint}/api/admin/config/schema?{query}"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(no_schema["has_schema"], false);
 }
 
 #[tokio::test]
@@ -622,4 +857,138 @@ async fn admin_clients_view_separates_sessions_from_api_activity() {
             })
     );
     assert!(clients["api_activity"].as_array().is_some());
+}
+
+#[tokio::test]
+async fn admin_client_credentials_can_be_created_rotated_and_deactivated() {
+    let (grpc_addr, admin_addr) = free_distinct_addrs();
+    let token = "client-credentials-admin-token";
+    let Some((admin_endpoint, pool)) = spawn_server_with_env(
+        grpc_addr,
+        admin_addr,
+        HashMap::from([
+            ("PGAPP_ENABLE_ADMIN".to_string(), "true".to_string()),
+            ("PGAPP_ADMIN_BIND_ADDR".to_string(), admin_addr.to_string()),
+            ("PGAPP_ADMIN_TOKEN".to_string(), token.to_string()),
+        ]),
+    )
+    .await
+    else {
+        eprintln!("skipping Admin integration test: DATABASE_URL is not set or unavailable");
+        return;
+    };
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .unwrap();
+    assert!(
+        wait_for_http(&client, &format!("{admin_endpoint}/api/admin/overview")).await,
+        "Admin HTTP listener did not start"
+    );
+
+    let client_key = unique("admin_client_credential");
+    let unauthorized = client
+        .post(format!("{admin_endpoint}/api/admin/clients"))
+        .json(&serde_json::json!({
+            "client_key": client_key,
+            "roles": ["cache", "mq"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let created: Value = client
+        .post(format!("{admin_endpoint}/api/admin/clients"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "client_key": client_key,
+            "roles": ["cache", "mq"]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let first_secret = created["secret"].as_str().unwrap().to_string();
+    assert_eq!(created["client_key"], client_key);
+    assert!(!first_secret.is_empty());
+
+    let store = ClientStore::new(pool.clone());
+    assert!(
+        store
+            .authenticate(&client_key, &first_secret)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    let listed: Value = client
+        .get(format!("{admin_endpoint}/api/admin/clients"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        listed["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["client_key"] == client_key
+                && item["active"] == true
+                && item["roles"].as_array().unwrap().len() == 2)
+    );
+
+    let rotated: Value = client
+        .post(format!(
+            "{admin_endpoint}/api/admin/clients/{client_key}/rotate"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let second_secret = rotated["secret"].as_str().unwrap().to_string();
+    assert_ne!(second_secret, first_secret);
+    assert!(
+        store
+            .authenticate(&client_key, &first_secret)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        store
+            .authenticate(&client_key, &second_secret)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    let deactivated: Value = client
+        .post(format!(
+            "{admin_endpoint}/api/admin/clients/{client_key}/deactivate"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(deactivated["success"], true);
+    assert!(
+        store
+            .authenticate(&client_key, &second_secret)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }

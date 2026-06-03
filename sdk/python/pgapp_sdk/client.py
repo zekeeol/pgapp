@@ -1,19 +1,13 @@
 from __future__ import annotations
 
 import json
-import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal, Protocol, TypeVar, cast
 
 import grpc
 
-_GENERATED_ROOT = Path(__file__).resolve().parent / "gen"
-if str(_GENERATED_ROOT) not in sys.path:
-    sys.path.insert(0, str(_GENERATED_ROOT))
-
-from pgapp.v1 import cache_pb2, cache_pb2_grpc, config_pb2, config_pb2_grpc, mq_pb2, mq_pb2_grpc  # type: ignore[import-not-found]  # noqa: E402
+from pgapp.v1 import cache_pb2, cache_pb2_grpc, config_pb2, config_pb2_grpc, mq_pb2, mq_pb2_grpc  # type: ignore[import-not-found]
 
 type JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 type QueueStorageMode = Literal["durable", "transient"]
@@ -22,7 +16,21 @@ ResponseT = TypeVar("ResponseT", covariant=True)
 
 
 class _UnaryUnary(Protocol[ResponseT]):
-    def __call__(self, request: object, timeout: float | None = None) -> ResponseT: ...
+    def __call__(
+        self,
+        request: object,
+        timeout: float | None = None,
+        metadata: Sequence[tuple[str, str]] | None = None,
+    ) -> ResponseT: ...
+
+
+class _UnaryStream(Protocol[ResponseT]):
+    def __call__(
+        self,
+        request: object,
+        timeout: float | None = None,
+        metadata: Sequence[tuple[str, str]] | None = None,
+    ) -> Iterator[ResponseT]: ...
 
 
 class _OperationResult(Protocol):
@@ -66,6 +74,23 @@ class _CacheStatsResponse(Protocol):
     namespace_usage: Sequence[_NamespaceUsageProto]
 
 
+class _IntegerValueResponse(Protocol):
+    value: int
+
+
+class _SetNxResponse(Protocol):
+    created: bool
+
+
+class _GetSetResponse(Protocol):
+    hit: bool
+    old_value: bytes
+
+
+class _LengthResponse(Protocol):
+    length: int
+
+
 class _SendMessageResponse(Protocol):
     message_id: int
 
@@ -92,6 +117,22 @@ class _QueueMetricsResponse(Protocol):
     in_flight_message_count: int
     oldest_visible_message_age_seconds: int
     archived_message_count: int
+    dlq_message_count: int
+
+
+class _DlqMessageProto(Protocol):
+    id: int
+    original_message_id: int
+    read_count: int
+    enqueued_at: str
+    dead_lettered_at: str
+    json_payload: str
+    reason: str
+
+
+class _ListDlqMessagesResponse(Protocol):
+    messages: Sequence[_DlqMessageProto]
+    next_offset: int
 
 
 class _ConfigScopeProto(Protocol):
@@ -155,11 +196,23 @@ class MQMessage:
 
 
 @dataclass(frozen=True)
+class DLQMessage:
+    id: int
+    original_message_id: int
+    read_count: int
+    enqueued_at: str
+    dead_lettered_at: str
+    payload: JsonValue
+    reason: str
+
+
+@dataclass(frozen=True)
 class QueueMetrics:
     visible_message_count: int
     in_flight_message_count: int
     oldest_visible_message_age_seconds: int
     archived_message_count: int
+    dlq_message_count: int
 
 
 @dataclass(frozen=True)
@@ -199,6 +252,7 @@ class PGAppError(Exception):
 class PGAppClient:
     endpoint: str
     timeout: float | None
+    metadata: tuple[tuple[str, str], ...]
     channel: grpc.Channel
     cache: CacheClient
     mq: MQClient
@@ -209,9 +263,21 @@ class PGAppClient:
         endpoint: str = "127.0.0.1:50051",
         timeout: float | None = None,
         channel: grpc.Channel | None = None,
+        key: str | None = None,
+        secret: str | None = None,
     ) -> None:
+        if (key is None) != (secret is None):
+            raise PGAppError(
+                "key and secret must be provided together",
+                status_code="invalid_argument",
+            )
         self.endpoint = endpoint
         self.timeout = timeout
+        self.metadata = (
+            (("x-pgapp-key", key), ("x-pgapp-secret", secret))
+            if key is not None and secret is not None
+            else ()
+        )
         self.channel = channel if channel is not None else grpc.insecure_channel(endpoint)
         self.cache = CacheClient(self)
         self.mq = MQClient(self)
@@ -322,9 +388,129 @@ class CacheClient:
             ),
         )
 
+    def increment(
+        self,
+        namespace: str,
+        key: str,
+        delta: int = 1,
+        ttl_seconds: int | None = None,
+    ) -> int:
+        request: object = cache_pb2.IncrementRequest(
+            namespace=namespace,
+            key=key,
+            delta=delta,
+            ttl_seconds=ttl_seconds or 0,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_IntegerValueResponse], getattr(self._stub, "Increment")),
+            request,
+        )
+        return int(response.value)
+
+    def decrement(
+        self,
+        namespace: str,
+        key: str,
+        delta: int = 1,
+        ttl_seconds: int | None = None,
+    ) -> int:
+        request: object = cache_pb2.DecrementRequest(
+            namespace=namespace,
+            key=key,
+            delta=delta,
+            ttl_seconds=ttl_seconds or 0,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_IntegerValueResponse], getattr(self._stub, "Decrement")),
+            request,
+        )
+        return int(response.value)
+
+    def set_nx(
+        self,
+        namespace: str,
+        key: str,
+        value: bytes | str,
+        ttl_seconds: int | None = None,
+    ) -> bool:
+        request: object = cache_pb2.SetNXRequest(
+            namespace=namespace,
+            key=key,
+            value=self.encode_value(value),
+            ttl_seconds=ttl_seconds or 0,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_SetNxResponse], getattr(self._stub, "SetNX")),
+            request,
+        )
+        return bool(response.created)
+
+    def get_set(
+        self,
+        namespace: str,
+        key: str,
+        value: bytes | str,
+        ttl_seconds: int | None = None,
+    ) -> bytes | None:
+        request: object = cache_pb2.GetSetRequest(
+            namespace=namespace,
+            key=key,
+            value=self.encode_value(value),
+            ttl_seconds=ttl_seconds or 0,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_GetSetResponse], getattr(self._stub, "GetSet")),
+            request,
+        )
+        if not response.hit:
+            return None
+        return bytes(response.old_value)
+
+    def append(
+        self,
+        namespace: str,
+        key: str,
+        value: bytes | str,
+        ttl_seconds: int | None = None,
+    ) -> int:
+        request: object = cache_pb2.AppendRequest(
+            namespace=namespace,
+            key=key,
+            value=self.encode_value(value),
+            ttl_seconds=ttl_seconds or 0,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_LengthResponse], getattr(self._stub, "Append")),
+            request,
+        )
+        return int(response.length)
+
+    def prepend(
+        self,
+        namespace: str,
+        key: str,
+        value: bytes | str,
+        ttl_seconds: int | None = None,
+    ) -> int:
+        request: object = cache_pb2.PrependRequest(
+            namespace=namespace,
+            key=key,
+            value=self.encode_value(value),
+            ttl_seconds=ttl_seconds or 0,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_LengthResponse], getattr(self._stub, "Prepend")),
+            request,
+        )
+        return int(response.length)
+
     def _call(self, method: _UnaryUnary[ResponseT], request: object) -> ResponseT:
         try:
-            return method(request, timeout=self.client.timeout)
+            return method(
+                request,
+                timeout=self.client.timeout,
+                metadata=self.client.metadata or None,
+            )
         except grpc.RpcError as exc:
             status = exc.code()
             status_code = status.name if status is not None else None
@@ -503,11 +689,99 @@ class MQClient:
                 response.oldest_visible_message_age_seconds
             ),
             archived_message_count=int(response.archived_message_count),
+            dlq_message_count=int(response.dlq_message_count),
         )
+
+    def list_dlq_messages(
+        self,
+        queue_name: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[DLQMessage]:
+        request: object = mq_pb2.ListDlqMessagesRequest(
+            queue_name=queue_name,
+            limit=limit,
+            offset=offset,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_ListDlqMessagesResponse], getattr(self._stub, "ListDlqMessages")),
+            request,
+        )
+        return [self._dlq_message_from_proto(message) for message in response.messages]
+
+    def get_dlq_message(self, queue_name: str, original_message_id: int) -> DLQMessage:
+        request: object = mq_pb2.GetDlqMessageRequest(
+            queue_name=queue_name,
+            original_message_id=original_message_id,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_DlqMessageProto], getattr(self._stub, "GetDlqMessage")),
+            request,
+        )
+        return self._dlq_message_from_proto(response)
+
+    def reprocess_dlq_message(self, queue_name: str, original_message_id: int) -> bool:
+        request: object = mq_pb2.ReprocessDlqMessageRequest(
+            queue_name=queue_name,
+            original_message_id=original_message_id,
+        )
+        response = self._call(
+            cast(_UnaryUnary[_OperationResult], getattr(self._stub, "ReprocessDlqMessage")),
+            request,
+        )
+        return bool(response.success)
+
+    def purge_dlq(self, queue_name: str) -> bool:
+        request: object = mq_pb2.PurgeDlqRequest(queue_name=queue_name)
+        response = self._call(
+            cast(_UnaryUnary[_OperationResult], getattr(self._stub, "PurgeDlq")),
+            request,
+        )
+        return bool(response.success)
+
+    def stream_read(
+        self,
+        queue_name: str,
+        quantity: int = 1,
+        visibility_timeout_seconds: int = 30,
+    ) -> Iterator[MQMessage]:
+        request: object = mq_pb2.StreamReadRequest(
+            queue_name=queue_name,
+            quantity=quantity,
+            visibility_timeout_seconds=visibility_timeout_seconds,
+        )
+        responses = self._stream_call(
+            cast(_UnaryStream[_ReadMessagesResponse], getattr(self._stub, "StreamRead")),
+            request,
+        )
+        for response in responses:
+            for message in response.messages:
+                yield self._message_from_proto(message)
 
     def _call(self, method: _UnaryUnary[ResponseT], request: object) -> ResponseT:
         try:
-            return method(request, timeout=self.client.timeout)
+            return method(
+                request,
+                timeout=self.client.timeout,
+                metadata=self.client.metadata or None,
+            )
+        except grpc.RpcError as exc:
+            status = exc.code()
+            status_code = status.name if status is not None else None
+            details = exc.details() or str(exc)
+            raise PGAppError(details, status_code=status_code) from exc
+
+    def _stream_call(
+        self,
+        method: _UnaryStream[ResponseT],
+        request: object,
+    ) -> Iterator[ResponseT]:
+        try:
+            yield from method(
+                request,
+                timeout=self.client.timeout,
+                metadata=self.client.metadata or None,
+            )
         except grpc.RpcError as exc:
             status = exc.code()
             status_code = status.name if status is not None else None
@@ -529,6 +803,17 @@ class MQClient:
             visibility_timeout_at=message.visibility_timeout_at,
             ack_token=message.ack_token,
             payload=cast(JsonValue, json.loads(message.json_payload)),
+        )
+
+    def _dlq_message_from_proto(self, message: _DlqMessageProto) -> DLQMessage:
+        return DLQMessage(
+            id=int(message.id),
+            original_message_id=int(message.original_message_id),
+            read_count=int(message.read_count),
+            enqueued_at=message.enqueued_at,
+            dead_lettered_at=message.dead_lettered_at,
+            payload=cast(JsonValue, json.loads(message.json_payload)),
+            reason=message.reason,
         )
 
 
@@ -603,7 +888,11 @@ class ConfigClient:
 
     def _call(self, method: _UnaryUnary[ResponseT], request: object) -> ResponseT:
         try:
-            return method(request, timeout=self.client.timeout)
+            return method(
+                request,
+                timeout=self.client.timeout,
+                metadata=self.client.metadata or None,
+            )
         except grpc.RpcError as exc:
             status = exc.code()
             status_code = status.name if status is not None else None

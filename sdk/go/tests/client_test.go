@@ -45,3 +45,23 @@ func TestDialCreatesGeneratedGrpcWrappers(t *testing.T) {
 		t.Fatal("expected cache, mq, and config wrappers")
 	}
 }
+
+func TestPhaseTwoAPISurfaceCompiles(t *testing.T) {
+	client := pgapp.NewClient("127.0.0.1:50051", time.Second)
+	ctx := context.Background()
+	_, _ = client.Cache().Increment(ctx, "ns", "counter", 1, 60)
+	_, _ = client.Cache().Decrement(ctx, "ns", "counter", 1, 0)
+	_, _ = client.Cache().SetNX(ctx, "ns", "lock", []byte("1"), 60)
+	_, _, _ = client.Cache().GetSet(ctx, "ns", "slot", []byte("v2"), 0)
+	_, _ = client.Cache().Append(ctx, "ns", "log", []byte("tail"), 0)
+	_, _ = client.Cache().Prepend(ctx, "ns", "log", []byte("head"), 0)
+	_, _ = client.MQ().ListDLQMessages(ctx, "orders", 10, 0)
+	_, _ = client.MQ().GetDLQMessage(ctx, "orders", 1)
+	_, _ = client.MQ().ReprocessDLQMessage(ctx, "orders", 1)
+	_, _ = client.MQ().PurgeDLQ(ctx, "orders")
+	_, _ = client.MQ().StreamRead(ctx, "orders", 1, 30)
+	authed := pgapp.NewClientWithCredentials("127.0.0.1:50051", time.Second, "key", "secret")
+	if authed == nil {
+		t.Fatal("expected client")
+	}
+}

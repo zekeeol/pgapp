@@ -6,6 +6,9 @@ const CACHE_SCHEMA: &str = include_str!("../../../migrations/0001_cache.sql");
 const MQ_SCHEMA: &str = include_str!("../../../migrations/0002_mq.sql");
 const ADMIN_SCHEMA: &str = include_str!("../../../migrations/0003_admin.sql");
 const CONFIG_SCHEMA: &str = include_str!("../../../migrations/0004_config.sql");
+const DLQ_SCHEMA: &str = include_str!("../../../migrations/0005_dlq.sql");
+const AUTH_SCHEMA: &str = include_str!("../../../migrations/0006_auth.sql");
+const CONFIG_SCHEMA_VALIDATION: &str = include_str!("../../../migrations/0007_config_schema.sql");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapabilityStatus {
@@ -29,6 +32,9 @@ pub async fn apply_schema(pool: &PgPool) -> PgAppResult<()> {
     pool.execute(MQ_SCHEMA).await?;
     pool.execute(ADMIN_SCHEMA).await?;
     pool.execute(CONFIG_SCHEMA).await?;
+    pool.execute(DLQ_SCHEMA).await?;
+    pool.execute(AUTH_SCHEMA).await?;
+    pool.execute(CONFIG_SCHEMA_VALIDATION).await?;
     Ok(())
 }
 
@@ -74,5 +80,18 @@ async fn check_table(pool: &PgPool, table: &'static str, name: &'static str) -> 
             available: false,
             message: err.to_string(),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apply_schema_embeds_phase_two_migrations() {
+        assert!(DLQ_SCHEMA.contains("CREATE TABLE IF NOT EXISTS mq_dlq"));
+        assert!(DLQ_SCHEMA.contains("max_redelivery_count"));
+        assert!(AUTH_SCHEMA.contains("CREATE TABLE IF NOT EXISTS pgapp_clients"));
+        assert!(CONFIG_SCHEMA_VALIDATION.contains("json_schema JSONB"));
     }
 }

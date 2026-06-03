@@ -14,6 +14,12 @@ service CacheService {
   rpc Exists(ExistsCacheRequest) returns (ExistsCacheResponse);
   rpc InvalidateNamespace(InvalidateNamespaceRequest) returns (OperationResult);
   rpc Stats(CacheStatsRequest) returns (CacheStatsResponse);
+  rpc Increment(IncrementRequest) returns (IncrementResponse);
+  rpc Decrement(DecrementRequest) returns (DecrementResponse);
+  rpc SetNX(SetNXRequest) returns (SetNXResponse);
+  rpc GetSet(GetSetRequest) returns (GetSetResponse);
+  rpc Append(AppendRequest) returns (AppendResponse);
+  rpc Prepend(PrependRequest) returns (PrependResponse);
 }
 
 message SetCacheRequest {
@@ -84,4 +90,71 @@ message CacheStatsResponse {
   int64 logical_key_count = 7;
   int64 logical_byte_size = 8;
   repeated NamespaceUsage namespace_usage = 9;
+}
+
+message IncrementRequest {
+  string namespace = 1;
+  string key = 2;
+  int64 delta = 3;
+  int64 ttl_seconds = 4;
+}
+
+message IncrementResponse {
+  int64 value = 1;
+}
+
+message DecrementRequest {
+  string namespace = 1;
+  string key = 2;
+  int64 delta = 3;
+  int64 ttl_seconds = 4;
+}
+
+message DecrementResponse {
+  int64 value = 1;
+}
+
+message SetNXRequest {
+  string namespace = 1;
+  string key = 2;
+  bytes value = 3;
+  int64 ttl_seconds = 4;
+}
+
+message SetNXResponse {
+  bool created = 1;
+}
+
+message GetSetRequest {
+  string namespace = 1;
+  string key = 2;
+  bytes value = 3;
+  int64 ttl_seconds = 4;
+}
+
+message GetSetResponse {
+  bool hit = 1;
+  bytes old_value = 2;
+}
+
+message AppendRequest {
+  string namespace = 1;
+  string key = 2;
+  bytes value = 3;
+  int64 ttl_seconds = 4;
+}
+
+message AppendResponse {
+  int64 length = 1;
+}
+
+message PrependRequest {
+  string namespace = 1;
+  string key = 2;
+  bytes value = 3;
+  int64 ttl_seconds = 4;
+}
+
+message PrependResponse {
+  int64 length = 1;
 }

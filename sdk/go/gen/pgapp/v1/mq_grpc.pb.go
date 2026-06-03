@@ -30,6 +30,11 @@ const (
 	MQService_Archive_FullMethodName              = "/pgapp.v1.MQService/Archive"
 	MQService_SetVisibilityTimeout_FullMethodName = "/pgapp.v1.MQService/SetVisibilityTimeout"
 	MQService_Metrics_FullMethodName              = "/pgapp.v1.MQService/Metrics"
+	MQService_ListDlqMessages_FullMethodName      = "/pgapp.v1.MQService/ListDlqMessages"
+	MQService_GetDlqMessage_FullMethodName        = "/pgapp.v1.MQService/GetDlqMessage"
+	MQService_ReprocessDlqMessage_FullMethodName  = "/pgapp.v1.MQService/ReprocessDlqMessage"
+	MQService_PurgeDlq_FullMethodName             = "/pgapp.v1.MQService/PurgeDlq"
+	MQService_StreamRead_FullMethodName           = "/pgapp.v1.MQService/StreamRead"
 )
 
 // MQServiceClient is the client API for MQService service.
@@ -47,6 +52,11 @@ type MQServiceClient interface {
 	Archive(ctx context.Context, in *ArchiveMessageRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	SetVisibilityTimeout(ctx context.Context, in *SetVisibilityTimeoutRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	Metrics(ctx context.Context, in *QueueMetricsRequest, opts ...grpc.CallOption) (*QueueMetricsResponse, error)
+	ListDlqMessages(ctx context.Context, in *ListDlqMessagesRequest, opts ...grpc.CallOption) (*ListDlqMessagesResponse, error)
+	GetDlqMessage(ctx context.Context, in *GetDlqMessageRequest, opts ...grpc.CallOption) (*DlqMessage, error)
+	ReprocessDlqMessage(ctx context.Context, in *ReprocessDlqMessageRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	PurgeDlq(ctx context.Context, in *PurgeDlqRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	StreamRead(ctx context.Context, in *StreamReadRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadMessagesResponse], error)
 }
 
 type mQServiceClient struct {
@@ -167,6 +177,65 @@ func (c *mQServiceClient) Metrics(ctx context.Context, in *QueueMetricsRequest, 
 	return out, nil
 }
 
+func (c *mQServiceClient) ListDlqMessages(ctx context.Context, in *ListDlqMessagesRequest, opts ...grpc.CallOption) (*ListDlqMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDlqMessagesResponse)
+	err := c.cc.Invoke(ctx, MQService_ListDlqMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mQServiceClient) GetDlqMessage(ctx context.Context, in *GetDlqMessageRequest, opts ...grpc.CallOption) (*DlqMessage, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DlqMessage)
+	err := c.cc.Invoke(ctx, MQService_GetDlqMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mQServiceClient) ReprocessDlqMessage(ctx context.Context, in *ReprocessDlqMessageRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OperationResult)
+	err := c.cc.Invoke(ctx, MQService_ReprocessDlqMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mQServiceClient) PurgeDlq(ctx context.Context, in *PurgeDlqRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OperationResult)
+	err := c.cc.Invoke(ctx, MQService_PurgeDlq_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mQServiceClient) StreamRead(ctx context.Context, in *StreamReadRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadMessagesResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &MQService_ServiceDesc.Streams[0], MQService_StreamRead_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamReadRequest, ReadMessagesResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type MQService_StreamReadClient = grpc.ServerStreamingClient[ReadMessagesResponse]
+
 // MQServiceServer is the server API for MQService service.
 // All implementations must embed UnimplementedMQServiceServer
 // for forward compatibility.
@@ -182,6 +251,11 @@ type MQServiceServer interface {
 	Archive(context.Context, *ArchiveMessageRequest) (*OperationResult, error)
 	SetVisibilityTimeout(context.Context, *SetVisibilityTimeoutRequest) (*OperationResult, error)
 	Metrics(context.Context, *QueueMetricsRequest) (*QueueMetricsResponse, error)
+	ListDlqMessages(context.Context, *ListDlqMessagesRequest) (*ListDlqMessagesResponse, error)
+	GetDlqMessage(context.Context, *GetDlqMessageRequest) (*DlqMessage, error)
+	ReprocessDlqMessage(context.Context, *ReprocessDlqMessageRequest) (*OperationResult, error)
+	PurgeDlq(context.Context, *PurgeDlqRequest) (*OperationResult, error)
+	StreamRead(*StreamReadRequest, grpc.ServerStreamingServer[ReadMessagesResponse]) error
 	mustEmbedUnimplementedMQServiceServer()
 }
 
@@ -224,6 +298,21 @@ func (UnimplementedMQServiceServer) SetVisibilityTimeout(context.Context, *SetVi
 }
 func (UnimplementedMQServiceServer) Metrics(context.Context, *QueueMetricsRequest) (*QueueMetricsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Metrics not implemented")
+}
+func (UnimplementedMQServiceServer) ListDlqMessages(context.Context, *ListDlqMessagesRequest) (*ListDlqMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDlqMessages not implemented")
+}
+func (UnimplementedMQServiceServer) GetDlqMessage(context.Context, *GetDlqMessageRequest) (*DlqMessage, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDlqMessage not implemented")
+}
+func (UnimplementedMQServiceServer) ReprocessDlqMessage(context.Context, *ReprocessDlqMessageRequest) (*OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReprocessDlqMessage not implemented")
+}
+func (UnimplementedMQServiceServer) PurgeDlq(context.Context, *PurgeDlqRequest) (*OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method PurgeDlq not implemented")
+}
+func (UnimplementedMQServiceServer) StreamRead(*StreamReadRequest, grpc.ServerStreamingServer[ReadMessagesResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamRead not implemented")
 }
 func (UnimplementedMQServiceServer) mustEmbedUnimplementedMQServiceServer() {}
 func (UnimplementedMQServiceServer) testEmbeddedByValue()                   {}
@@ -444,6 +533,89 @@ func _MQService_Metrics_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MQService_ListDlqMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDlqMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MQServiceServer).ListDlqMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MQService_ListDlqMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MQServiceServer).ListDlqMessages(ctx, req.(*ListDlqMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MQService_GetDlqMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDlqMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MQServiceServer).GetDlqMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MQService_GetDlqMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MQServiceServer).GetDlqMessage(ctx, req.(*GetDlqMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MQService_ReprocessDlqMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReprocessDlqMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MQServiceServer).ReprocessDlqMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MQService_ReprocessDlqMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MQServiceServer).ReprocessDlqMessage(ctx, req.(*ReprocessDlqMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MQService_PurgeDlq_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeDlqRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MQServiceServer).PurgeDlq(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MQService_PurgeDlq_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MQServiceServer).PurgeDlq(ctx, req.(*PurgeDlqRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MQService_StreamRead_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamReadRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(MQServiceServer).StreamRead(m, &grpc.GenericServerStream[StreamReadRequest, ReadMessagesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type MQService_StreamReadServer = grpc.ServerStreamingServer[ReadMessagesResponse]
+
 // MQService_ServiceDesc is the grpc.ServiceDesc for MQService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -495,7 +667,29 @@ var MQService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Metrics",
 			Handler:    _MQService_Metrics_Handler,
 		},
+		{
+			MethodName: "ListDlqMessages",
+			Handler:    _MQService_ListDlqMessages_Handler,
+		},
+		{
+			MethodName: "GetDlqMessage",
+			Handler:    _MQService_GetDlqMessage_Handler,
+		},
+		{
+			MethodName: "ReprocessDlqMessage",
+			Handler:    _MQService_ReprocessDlqMessage_Handler,
+		},
+		{
+			MethodName: "PurgeDlq",
+			Handler:    _MQService_PurgeDlq_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamRead",
+			Handler:       _MQService_StreamRead_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "pgapp/v1/mq.proto",
 }

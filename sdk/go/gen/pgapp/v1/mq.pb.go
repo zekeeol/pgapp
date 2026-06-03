@@ -554,6 +554,66 @@ func (x *ReadWithPollRequest) GetPollIntervalMillis() int64 {
 	return 0
 }
 
+type StreamReadRequest struct {
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	QueueName                string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
+	Quantity                 int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	VisibilityTimeoutSeconds int64                  `protobuf:"varint,3,opt,name=visibility_timeout_seconds,json=visibilityTimeoutSeconds,proto3" json:"visibility_timeout_seconds,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *StreamReadRequest) Reset() {
+	*x = StreamReadRequest{}
+	mi := &file_pgapp_v1_mq_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamReadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamReadRequest) ProtoMessage() {}
+
+func (x *StreamReadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_mq_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamReadRequest.ProtoReflect.Descriptor instead.
+func (*StreamReadRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *StreamReadRequest) GetQueueName() string {
+	if x != nil {
+		return x.QueueName
+	}
+	return ""
+}
+
+func (x *StreamReadRequest) GetQuantity() int32 {
+	if x != nil {
+		return x.Quantity
+	}
+	return 0
+}
+
+func (x *StreamReadRequest) GetVisibilityTimeoutSeconds() int64 {
+	if x != nil {
+		return x.VisibilityTimeoutSeconds
+	}
+	return 0
+}
+
 type QueueMessage struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	MessageId           int64                  `protobuf:"varint,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
@@ -568,7 +628,7 @@ type QueueMessage struct {
 
 func (x *QueueMessage) Reset() {
 	*x = QueueMessage{}
-	mi := &file_pgapp_v1_mq_proto_msgTypes[9]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -580,7 +640,7 @@ func (x *QueueMessage) String() string {
 func (*QueueMessage) ProtoMessage() {}
 
 func (x *QueueMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pgapp_v1_mq_proto_msgTypes[9]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -593,7 +653,7 @@ func (x *QueueMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueMessage.ProtoReflect.Descriptor instead.
 func (*QueueMessage) Descriptor() ([]byte, []int) {
-	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{9}
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *QueueMessage) GetMessageId() int64 {
@@ -647,7 +707,7 @@ type ReadMessagesResponse struct {
 
 func (x *ReadMessagesResponse) Reset() {
 	*x = ReadMessagesResponse{}
-	mi := &file_pgapp_v1_mq_proto_msgTypes[10]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -659,7 +719,7 @@ func (x *ReadMessagesResponse) String() string {
 func (*ReadMessagesResponse) ProtoMessage() {}
 
 func (x *ReadMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pgapp_v1_mq_proto_msgTypes[10]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -672,7 +732,7 @@ func (x *ReadMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadMessagesResponse.ProtoReflect.Descriptor instead.
 func (*ReadMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{10}
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ReadMessagesResponse) GetMessages() []*QueueMessage {
@@ -693,7 +753,7 @@ type AckMessageRequest struct {
 
 func (x *AckMessageRequest) Reset() {
 	*x = AckMessageRequest{}
-	mi := &file_pgapp_v1_mq_proto_msgTypes[11]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -705,7 +765,7 @@ func (x *AckMessageRequest) String() string {
 func (*AckMessageRequest) ProtoMessage() {}
 
 func (x *AckMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pgapp_v1_mq_proto_msgTypes[11]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -718,7 +778,7 @@ func (x *AckMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckMessageRequest.ProtoReflect.Descriptor instead.
 func (*AckMessageRequest) Descriptor() ([]byte, []int) {
-	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{11}
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AckMessageRequest) GetQueueName() string {
@@ -753,7 +813,7 @@ type ArchiveMessageRequest struct {
 
 func (x *ArchiveMessageRequest) Reset() {
 	*x = ArchiveMessageRequest{}
-	mi := &file_pgapp_v1_mq_proto_msgTypes[12]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -765,7 +825,7 @@ func (x *ArchiveMessageRequest) String() string {
 func (*ArchiveMessageRequest) ProtoMessage() {}
 
 func (x *ArchiveMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pgapp_v1_mq_proto_msgTypes[12]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -778,7 +838,7 @@ func (x *ArchiveMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveMessageRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveMessageRequest) Descriptor() ([]byte, []int) {
-	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{12}
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ArchiveMessageRequest) GetQueueName() string {
@@ -814,7 +874,7 @@ type SetVisibilityTimeoutRequest struct {
 
 func (x *SetVisibilityTimeoutRequest) Reset() {
 	*x = SetVisibilityTimeoutRequest{}
-	mi := &file_pgapp_v1_mq_proto_msgTypes[13]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -826,7 +886,7 @@ func (x *SetVisibilityTimeoutRequest) String() string {
 func (*SetVisibilityTimeoutRequest) ProtoMessage() {}
 
 func (x *SetVisibilityTimeoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pgapp_v1_mq_proto_msgTypes[13]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -839,7 +899,7 @@ func (x *SetVisibilityTimeoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetVisibilityTimeoutRequest.ProtoReflect.Descriptor instead.
 func (*SetVisibilityTimeoutRequest) Descriptor() ([]byte, []int) {
-	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{13}
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SetVisibilityTimeoutRequest) GetQueueName() string {
@@ -879,7 +939,7 @@ type QueueMetricsRequest struct {
 
 func (x *QueueMetricsRequest) Reset() {
 	*x = QueueMetricsRequest{}
-	mi := &file_pgapp_v1_mq_proto_msgTypes[14]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -891,7 +951,7 @@ func (x *QueueMetricsRequest) String() string {
 func (*QueueMetricsRequest) ProtoMessage() {}
 
 func (x *QueueMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pgapp_v1_mq_proto_msgTypes[14]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -904,7 +964,7 @@ func (x *QueueMetricsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueMetricsRequest.ProtoReflect.Descriptor instead.
 func (*QueueMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{14}
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *QueueMetricsRequest) GetQueueName() string {
@@ -920,13 +980,14 @@ type QueueMetricsResponse struct {
 	InFlightMessageCount           int64                  `protobuf:"varint,2,opt,name=in_flight_message_count,json=inFlightMessageCount,proto3" json:"in_flight_message_count,omitempty"`
 	OldestVisibleMessageAgeSeconds int64                  `protobuf:"varint,3,opt,name=oldest_visible_message_age_seconds,json=oldestVisibleMessageAgeSeconds,proto3" json:"oldest_visible_message_age_seconds,omitempty"`
 	ArchivedMessageCount           int64                  `protobuf:"varint,4,opt,name=archived_message_count,json=archivedMessageCount,proto3" json:"archived_message_count,omitempty"`
+	DlqMessageCount                int64                  `protobuf:"varint,5,opt,name=dlq_message_count,json=dlqMessageCount,proto3" json:"dlq_message_count,omitempty"`
 	unknownFields                  protoimpl.UnknownFields
 	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *QueueMetricsResponse) Reset() {
 	*x = QueueMetricsResponse{}
-	mi := &file_pgapp_v1_mq_proto_msgTypes[15]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -938,7 +999,7 @@ func (x *QueueMetricsResponse) String() string {
 func (*QueueMetricsResponse) ProtoMessage() {}
 
 func (x *QueueMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pgapp_v1_mq_proto_msgTypes[15]
+	mi := &file_pgapp_v1_mq_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -951,7 +1012,7 @@ func (x *QueueMetricsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueMetricsResponse.ProtoReflect.Descriptor instead.
 func (*QueueMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{15}
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *QueueMetricsResponse) GetVisibleMessageCount() int64 {
@@ -980,6 +1041,365 @@ func (x *QueueMetricsResponse) GetArchivedMessageCount() int64 {
 		return x.ArchivedMessageCount
 	}
 	return 0
+}
+
+func (x *QueueMetricsResponse) GetDlqMessageCount() int64 {
+	if x != nil {
+		return x.DlqMessageCount
+	}
+	return 0
+}
+
+type DlqMessage struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	OriginalMessageId int64                  `protobuf:"varint,2,opt,name=original_message_id,json=originalMessageId,proto3" json:"original_message_id,omitempty"`
+	ReadCount         int32                  `protobuf:"varint,3,opt,name=read_count,json=readCount,proto3" json:"read_count,omitempty"`
+	EnqueuedAt        string                 `protobuf:"bytes,4,opt,name=enqueued_at,json=enqueuedAt,proto3" json:"enqueued_at,omitempty"`
+	DeadLetteredAt    string                 `protobuf:"bytes,5,opt,name=dead_lettered_at,json=deadLetteredAt,proto3" json:"dead_lettered_at,omitempty"`
+	JsonPayload       string                 `protobuf:"bytes,6,opt,name=json_payload,json=jsonPayload,proto3" json:"json_payload,omitempty"`
+	Reason            string                 `protobuf:"bytes,7,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *DlqMessage) Reset() {
+	*x = DlqMessage{}
+	mi := &file_pgapp_v1_mq_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DlqMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DlqMessage) ProtoMessage() {}
+
+func (x *DlqMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_mq_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DlqMessage.ProtoReflect.Descriptor instead.
+func (*DlqMessage) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *DlqMessage) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *DlqMessage) GetOriginalMessageId() int64 {
+	if x != nil {
+		return x.OriginalMessageId
+	}
+	return 0
+}
+
+func (x *DlqMessage) GetReadCount() int32 {
+	if x != nil {
+		return x.ReadCount
+	}
+	return 0
+}
+
+func (x *DlqMessage) GetEnqueuedAt() string {
+	if x != nil {
+		return x.EnqueuedAt
+	}
+	return ""
+}
+
+func (x *DlqMessage) GetDeadLetteredAt() string {
+	if x != nil {
+		return x.DeadLetteredAt
+	}
+	return ""
+}
+
+func (x *DlqMessage) GetJsonPayload() string {
+	if x != nil {
+		return x.JsonPayload
+	}
+	return ""
+}
+
+func (x *DlqMessage) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type ListDlqMessagesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDlqMessagesRequest) Reset() {
+	*x = ListDlqMessagesRequest{}
+	mi := &file_pgapp_v1_mq_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDlqMessagesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDlqMessagesRequest) ProtoMessage() {}
+
+func (x *ListDlqMessagesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_mq_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDlqMessagesRequest.ProtoReflect.Descriptor instead.
+func (*ListDlqMessagesRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListDlqMessagesRequest) GetQueueName() string {
+	if x != nil {
+		return x.QueueName
+	}
+	return ""
+}
+
+func (x *ListDlqMessagesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListDlqMessagesRequest) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+type ListDlqMessagesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*DlqMessage          `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	NextOffset    int64                  `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDlqMessagesResponse) Reset() {
+	*x = ListDlqMessagesResponse{}
+	mi := &file_pgapp_v1_mq_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDlqMessagesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDlqMessagesResponse) ProtoMessage() {}
+
+func (x *ListDlqMessagesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_mq_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDlqMessagesResponse.ProtoReflect.Descriptor instead.
+func (*ListDlqMessagesResponse) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListDlqMessagesResponse) GetMessages() []*DlqMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *ListDlqMessagesResponse) GetNextOffset() int64 {
+	if x != nil {
+		return x.NextOffset
+	}
+	return 0
+}
+
+type GetDlqMessageRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	QueueName         string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
+	OriginalMessageId int64                  `protobuf:"varint,2,opt,name=original_message_id,json=originalMessageId,proto3" json:"original_message_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *GetDlqMessageRequest) Reset() {
+	*x = GetDlqMessageRequest{}
+	mi := &file_pgapp_v1_mq_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDlqMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDlqMessageRequest) ProtoMessage() {}
+
+func (x *GetDlqMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_mq_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDlqMessageRequest.ProtoReflect.Descriptor instead.
+func (*GetDlqMessageRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetDlqMessageRequest) GetQueueName() string {
+	if x != nil {
+		return x.QueueName
+	}
+	return ""
+}
+
+func (x *GetDlqMessageRequest) GetOriginalMessageId() int64 {
+	if x != nil {
+		return x.OriginalMessageId
+	}
+	return 0
+}
+
+type ReprocessDlqMessageRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	QueueName         string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
+	OriginalMessageId int64                  `protobuf:"varint,2,opt,name=original_message_id,json=originalMessageId,proto3" json:"original_message_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ReprocessDlqMessageRequest) Reset() {
+	*x = ReprocessDlqMessageRequest{}
+	mi := &file_pgapp_v1_mq_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReprocessDlqMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReprocessDlqMessageRequest) ProtoMessage() {}
+
+func (x *ReprocessDlqMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_mq_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReprocessDlqMessageRequest.ProtoReflect.Descriptor instead.
+func (*ReprocessDlqMessageRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ReprocessDlqMessageRequest) GetQueueName() string {
+	if x != nil {
+		return x.QueueName
+	}
+	return ""
+}
+
+func (x *ReprocessDlqMessageRequest) GetOriginalMessageId() int64 {
+	if x != nil {
+		return x.OriginalMessageId
+	}
+	return 0
+}
+
+type PurgeDlqRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	QueueName     string                 `protobuf:"bytes,1,opt,name=queue_name,json=queueName,proto3" json:"queue_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PurgeDlqRequest) Reset() {
+	*x = PurgeDlqRequest{}
+	mi := &file_pgapp_v1_mq_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PurgeDlqRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PurgeDlqRequest) ProtoMessage() {}
+
+func (x *PurgeDlqRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pgapp_v1_mq_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PurgeDlqRequest.ProtoReflect.Descriptor instead.
+func (*PurgeDlqRequest) Descriptor() ([]byte, []int) {
+	return file_pgapp_v1_mq_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PurgeDlqRequest) GetQueueName() string {
+	if x != nil {
+		return x.QueueName
+	}
+	return ""
 }
 
 var File_pgapp_v1_mq_proto protoreflect.FileDescriptor
@@ -1024,7 +1444,12 @@ const file_pgapp_v1_mq_proto_rawDesc = "" +
 	"\bquantity\x18\x02 \x01(\x05R\bquantity\x12<\n" +
 	"\x1avisibility_timeout_seconds\x18\x03 \x01(\x03R\x18visibilityTimeoutSeconds\x12(\n" +
 	"\x10max_poll_seconds\x18\x04 \x01(\x03R\x0emaxPollSeconds\x120\n" +
-	"\x14poll_interval_millis\x18\x05 \x01(\x03R\x12pollIntervalMillis\"\xe1\x01\n" +
+	"\x14poll_interval_millis\x18\x05 \x01(\x03R\x12pollIntervalMillis\"\x8c\x01\n" +
+	"\x11StreamReadRequest\x12\x1d\n" +
+	"\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x1a\n" +
+	"\bquantity\x18\x02 \x01(\x05R\bquantity\x12<\n" +
+	"\x1avisibility_timeout_seconds\x18\x03 \x01(\x03R\x18visibilityTimeoutSeconds\"\xe1\x01\n" +
 	"\fQueueMessage\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\x03R\tmessageId\x12\x1d\n" +
@@ -1058,16 +1483,48 @@ const file_pgapp_v1_mq_proto_rawDesc = "" +
 	"\tack_token\x18\x04 \x01(\tR\backToken\"4\n" +
 	"\x13QueueMetricsRequest\x12\x1d\n" +
 	"\n" +
-	"queue_name\x18\x01 \x01(\tR\tqueueName\"\x83\x02\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName\"\xaf\x02\n" +
 	"\x14QueueMetricsResponse\x122\n" +
 	"\x15visible_message_count\x18\x01 \x01(\x03R\x13visibleMessageCount\x125\n" +
 	"\x17in_flight_message_count\x18\x02 \x01(\x03R\x14inFlightMessageCount\x12J\n" +
 	"\"oldest_visible_message_age_seconds\x18\x03 \x01(\x03R\x1eoldestVisibleMessageAgeSeconds\x124\n" +
-	"\x16archived_message_count\x18\x04 \x01(\x03R\x14archivedMessageCount*x\n" +
+	"\x16archived_message_count\x18\x04 \x01(\x03R\x14archivedMessageCount\x12*\n" +
+	"\x11dlq_message_count\x18\x05 \x01(\x03R\x0fdlqMessageCount\"\xf1\x01\n" +
+	"\n" +
+	"DlqMessage\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
+	"\x13original_message_id\x18\x02 \x01(\x03R\x11originalMessageId\x12\x1d\n" +
+	"\n" +
+	"read_count\x18\x03 \x01(\x05R\treadCount\x12\x1f\n" +
+	"\venqueued_at\x18\x04 \x01(\tR\n" +
+	"enqueuedAt\x12(\n" +
+	"\x10dead_lettered_at\x18\x05 \x01(\tR\x0edeadLetteredAt\x12!\n" +
+	"\fjson_payload\x18\x06 \x01(\tR\vjsonPayload\x12\x16\n" +
+	"\x06reason\x18\a \x01(\tR\x06reason\"e\n" +
+	"\x16ListDlqMessagesRequest\x12\x1d\n" +
+	"\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x03R\x06offset\"l\n" +
+	"\x17ListDlqMessagesResponse\x120\n" +
+	"\bmessages\x18\x01 \x03(\v2\x14.pgapp.v1.DlqMessageR\bmessages\x12\x1f\n" +
+	"\vnext_offset\x18\x02 \x01(\x03R\n" +
+	"nextOffset\"e\n" +
+	"\x14GetDlqMessageRequest\x12\x1d\n" +
+	"\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName\x12.\n" +
+	"\x13original_message_id\x18\x02 \x01(\x03R\x11originalMessageId\"k\n" +
+	"\x1aReprocessDlqMessageRequest\x12\x1d\n" +
+	"\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName\x12.\n" +
+	"\x13original_message_id\x18\x02 \x01(\x03R\x11originalMessageId\"0\n" +
+	"\x0fPurgeDlqRequest\x12\x1d\n" +
+	"\n" +
+	"queue_name\x18\x01 \x01(\tR\tqueueName*x\n" +
 	"\x10QueueStorageMode\x12\"\n" +
 	"\x1eQUEUE_STORAGE_MODE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aQUEUE_STORAGE_MODE_DURABLE\x10\x01\x12 \n" +
-	"\x1cQUEUE_STORAGE_MODE_TRANSIENT\x10\x022\xa8\x06\n" +
+	"\x1cQUEUE_STORAGE_MODE_TRANSIENT\x10\x022\xae\t\n" +
 	"\tMQService\x12F\n" +
 	"\vCreateQueue\x12\x1c.pgapp.v1.CreateQueueRequest\x1a\x19.pgapp.v1.OperationResult\x12D\n" +
 	"\n" +
@@ -1080,7 +1537,13 @@ const file_pgapp_v1_mq_proto_rawDesc = "" +
 	"\x03Ack\x12\x1b.pgapp.v1.AckMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12E\n" +
 	"\aArchive\x12\x1f.pgapp.v1.ArchiveMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12X\n" +
 	"\x14SetVisibilityTimeout\x12%.pgapp.v1.SetVisibilityTimeoutRequest\x1a\x19.pgapp.v1.OperationResult\x12H\n" +
-	"\aMetrics\x12\x1d.pgapp.v1.QueueMetricsRequest\x1a\x1e.pgapp.v1.QueueMetricsResponseB4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3"
+	"\aMetrics\x12\x1d.pgapp.v1.QueueMetricsRequest\x1a\x1e.pgapp.v1.QueueMetricsResponse\x12V\n" +
+	"\x0fListDlqMessages\x12 .pgapp.v1.ListDlqMessagesRequest\x1a!.pgapp.v1.ListDlqMessagesResponse\x12E\n" +
+	"\rGetDlqMessage\x12\x1e.pgapp.v1.GetDlqMessageRequest\x1a\x14.pgapp.v1.DlqMessage\x12V\n" +
+	"\x13ReprocessDlqMessage\x12$.pgapp.v1.ReprocessDlqMessageRequest\x1a\x19.pgapp.v1.OperationResult\x12@\n" +
+	"\bPurgeDlq\x12\x19.pgapp.v1.PurgeDlqRequest\x1a\x19.pgapp.v1.OperationResult\x12K\n" +
+	"\n" +
+	"StreamRead\x12\x1b.pgapp.v1.StreamReadRequest\x1a\x1e.pgapp.v1.ReadMessagesResponse0\x01B4Z2github.com/zekee/pgapp/sdk/go/gen/pgapp/v1;pgappv1b\x06proto3"
 
 var (
 	file_pgapp_v1_mq_proto_rawDescOnce sync.Once
@@ -1095,7 +1558,7 @@ func file_pgapp_v1_mq_proto_rawDescGZIP() []byte {
 }
 
 var file_pgapp_v1_mq_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pgapp_v1_mq_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pgapp_v1_mq_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_pgapp_v1_mq_proto_goTypes = []any{
 	(QueueStorageMode)(0),               // 0: pgapp.v1.QueueStorageMode
 	(*CreateQueueRequest)(nil),          // 1: pgapp.v1.CreateQueueRequest
@@ -1107,45 +1570,63 @@ var file_pgapp_v1_mq_proto_goTypes = []any{
 	(*SendBatchResponse)(nil),           // 7: pgapp.v1.SendBatchResponse
 	(*ReadMessagesRequest)(nil),         // 8: pgapp.v1.ReadMessagesRequest
 	(*ReadWithPollRequest)(nil),         // 9: pgapp.v1.ReadWithPollRequest
-	(*QueueMessage)(nil),                // 10: pgapp.v1.QueueMessage
-	(*ReadMessagesResponse)(nil),        // 11: pgapp.v1.ReadMessagesResponse
-	(*AckMessageRequest)(nil),           // 12: pgapp.v1.AckMessageRequest
-	(*ArchiveMessageRequest)(nil),       // 13: pgapp.v1.ArchiveMessageRequest
-	(*SetVisibilityTimeoutRequest)(nil), // 14: pgapp.v1.SetVisibilityTimeoutRequest
-	(*QueueMetricsRequest)(nil),         // 15: pgapp.v1.QueueMetricsRequest
-	(*QueueMetricsResponse)(nil),        // 16: pgapp.v1.QueueMetricsResponse
-	(*OperationResult)(nil),             // 17: pgapp.v1.OperationResult
+	(*StreamReadRequest)(nil),           // 10: pgapp.v1.StreamReadRequest
+	(*QueueMessage)(nil),                // 11: pgapp.v1.QueueMessage
+	(*ReadMessagesResponse)(nil),        // 12: pgapp.v1.ReadMessagesResponse
+	(*AckMessageRequest)(nil),           // 13: pgapp.v1.AckMessageRequest
+	(*ArchiveMessageRequest)(nil),       // 14: pgapp.v1.ArchiveMessageRequest
+	(*SetVisibilityTimeoutRequest)(nil), // 15: pgapp.v1.SetVisibilityTimeoutRequest
+	(*QueueMetricsRequest)(nil),         // 16: pgapp.v1.QueueMetricsRequest
+	(*QueueMetricsResponse)(nil),        // 17: pgapp.v1.QueueMetricsResponse
+	(*DlqMessage)(nil),                  // 18: pgapp.v1.DlqMessage
+	(*ListDlqMessagesRequest)(nil),      // 19: pgapp.v1.ListDlqMessagesRequest
+	(*ListDlqMessagesResponse)(nil),     // 20: pgapp.v1.ListDlqMessagesResponse
+	(*GetDlqMessageRequest)(nil),        // 21: pgapp.v1.GetDlqMessageRequest
+	(*ReprocessDlqMessageRequest)(nil),  // 22: pgapp.v1.ReprocessDlqMessageRequest
+	(*PurgeDlqRequest)(nil),             // 23: pgapp.v1.PurgeDlqRequest
+	(*OperationResult)(nil),             // 24: pgapp.v1.OperationResult
 }
 var file_pgapp_v1_mq_proto_depIdxs = []int32{
 	0,  // 0: pgapp.v1.CreateQueueRequest.storage_mode:type_name -> pgapp.v1.QueueStorageMode
-	10, // 1: pgapp.v1.ReadMessagesResponse.messages:type_name -> pgapp.v1.QueueMessage
-	1,  // 2: pgapp.v1.MQService.CreateQueue:input_type -> pgapp.v1.CreateQueueRequest
-	2,  // 3: pgapp.v1.MQService.PurgeQueue:input_type -> pgapp.v1.PurgeQueueRequest
-	3,  // 4: pgapp.v1.MQService.DropQueue:input_type -> pgapp.v1.DropQueueRequest
-	4,  // 5: pgapp.v1.MQService.Send:input_type -> pgapp.v1.SendMessageRequest
-	6,  // 6: pgapp.v1.MQService.SendBatch:input_type -> pgapp.v1.SendBatchRequest
-	8,  // 7: pgapp.v1.MQService.Read:input_type -> pgapp.v1.ReadMessagesRequest
-	9,  // 8: pgapp.v1.MQService.ReadWithPoll:input_type -> pgapp.v1.ReadWithPollRequest
-	12, // 9: pgapp.v1.MQService.Ack:input_type -> pgapp.v1.AckMessageRequest
-	13, // 10: pgapp.v1.MQService.Archive:input_type -> pgapp.v1.ArchiveMessageRequest
-	14, // 11: pgapp.v1.MQService.SetVisibilityTimeout:input_type -> pgapp.v1.SetVisibilityTimeoutRequest
-	15, // 12: pgapp.v1.MQService.Metrics:input_type -> pgapp.v1.QueueMetricsRequest
-	17, // 13: pgapp.v1.MQService.CreateQueue:output_type -> pgapp.v1.OperationResult
-	17, // 14: pgapp.v1.MQService.PurgeQueue:output_type -> pgapp.v1.OperationResult
-	17, // 15: pgapp.v1.MQService.DropQueue:output_type -> pgapp.v1.OperationResult
-	5,  // 16: pgapp.v1.MQService.Send:output_type -> pgapp.v1.SendMessageResponse
-	7,  // 17: pgapp.v1.MQService.SendBatch:output_type -> pgapp.v1.SendBatchResponse
-	11, // 18: pgapp.v1.MQService.Read:output_type -> pgapp.v1.ReadMessagesResponse
-	11, // 19: pgapp.v1.MQService.ReadWithPoll:output_type -> pgapp.v1.ReadMessagesResponse
-	17, // 20: pgapp.v1.MQService.Ack:output_type -> pgapp.v1.OperationResult
-	17, // 21: pgapp.v1.MQService.Archive:output_type -> pgapp.v1.OperationResult
-	17, // 22: pgapp.v1.MQService.SetVisibilityTimeout:output_type -> pgapp.v1.OperationResult
-	16, // 23: pgapp.v1.MQService.Metrics:output_type -> pgapp.v1.QueueMetricsResponse
-	13, // [13:24] is the sub-list for method output_type
-	2,  // [2:13] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	11, // 1: pgapp.v1.ReadMessagesResponse.messages:type_name -> pgapp.v1.QueueMessage
+	18, // 2: pgapp.v1.ListDlqMessagesResponse.messages:type_name -> pgapp.v1.DlqMessage
+	1,  // 3: pgapp.v1.MQService.CreateQueue:input_type -> pgapp.v1.CreateQueueRequest
+	2,  // 4: pgapp.v1.MQService.PurgeQueue:input_type -> pgapp.v1.PurgeQueueRequest
+	3,  // 5: pgapp.v1.MQService.DropQueue:input_type -> pgapp.v1.DropQueueRequest
+	4,  // 6: pgapp.v1.MQService.Send:input_type -> pgapp.v1.SendMessageRequest
+	6,  // 7: pgapp.v1.MQService.SendBatch:input_type -> pgapp.v1.SendBatchRequest
+	8,  // 8: pgapp.v1.MQService.Read:input_type -> pgapp.v1.ReadMessagesRequest
+	9,  // 9: pgapp.v1.MQService.ReadWithPoll:input_type -> pgapp.v1.ReadWithPollRequest
+	13, // 10: pgapp.v1.MQService.Ack:input_type -> pgapp.v1.AckMessageRequest
+	14, // 11: pgapp.v1.MQService.Archive:input_type -> pgapp.v1.ArchiveMessageRequest
+	15, // 12: pgapp.v1.MQService.SetVisibilityTimeout:input_type -> pgapp.v1.SetVisibilityTimeoutRequest
+	16, // 13: pgapp.v1.MQService.Metrics:input_type -> pgapp.v1.QueueMetricsRequest
+	19, // 14: pgapp.v1.MQService.ListDlqMessages:input_type -> pgapp.v1.ListDlqMessagesRequest
+	21, // 15: pgapp.v1.MQService.GetDlqMessage:input_type -> pgapp.v1.GetDlqMessageRequest
+	22, // 16: pgapp.v1.MQService.ReprocessDlqMessage:input_type -> pgapp.v1.ReprocessDlqMessageRequest
+	23, // 17: pgapp.v1.MQService.PurgeDlq:input_type -> pgapp.v1.PurgeDlqRequest
+	10, // 18: pgapp.v1.MQService.StreamRead:input_type -> pgapp.v1.StreamReadRequest
+	24, // 19: pgapp.v1.MQService.CreateQueue:output_type -> pgapp.v1.OperationResult
+	24, // 20: pgapp.v1.MQService.PurgeQueue:output_type -> pgapp.v1.OperationResult
+	24, // 21: pgapp.v1.MQService.DropQueue:output_type -> pgapp.v1.OperationResult
+	5,  // 22: pgapp.v1.MQService.Send:output_type -> pgapp.v1.SendMessageResponse
+	7,  // 23: pgapp.v1.MQService.SendBatch:output_type -> pgapp.v1.SendBatchResponse
+	12, // 24: pgapp.v1.MQService.Read:output_type -> pgapp.v1.ReadMessagesResponse
+	12, // 25: pgapp.v1.MQService.ReadWithPoll:output_type -> pgapp.v1.ReadMessagesResponse
+	24, // 26: pgapp.v1.MQService.Ack:output_type -> pgapp.v1.OperationResult
+	24, // 27: pgapp.v1.MQService.Archive:output_type -> pgapp.v1.OperationResult
+	24, // 28: pgapp.v1.MQService.SetVisibilityTimeout:output_type -> pgapp.v1.OperationResult
+	17, // 29: pgapp.v1.MQService.Metrics:output_type -> pgapp.v1.QueueMetricsResponse
+	20, // 30: pgapp.v1.MQService.ListDlqMessages:output_type -> pgapp.v1.ListDlqMessagesResponse
+	18, // 31: pgapp.v1.MQService.GetDlqMessage:output_type -> pgapp.v1.DlqMessage
+	24, // 32: pgapp.v1.MQService.ReprocessDlqMessage:output_type -> pgapp.v1.OperationResult
+	24, // 33: pgapp.v1.MQService.PurgeDlq:output_type -> pgapp.v1.OperationResult
+	12, // 34: pgapp.v1.MQService.StreamRead:output_type -> pgapp.v1.ReadMessagesResponse
+	19, // [19:35] is the sub-list for method output_type
+	3,  // [3:19] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_pgapp_v1_mq_proto_init() }
@@ -1160,7 +1641,7 @@ func file_pgapp_v1_mq_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pgapp_v1_mq_proto_rawDesc), len(file_pgapp_v1_mq_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

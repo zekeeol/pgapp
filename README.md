@@ -1,8 +1,8 @@
 # PGApp
 
-PGApp is a PostgreSQL-first application service suite. Phase one provides a
-Rust gRPC server with PostgreSQL-backed Cache, MQ, and Config Center services,
-plus Rust, Go, and Python SDKs generated from shared protobuf contracts.
+PGApp is a PostgreSQL-first application service suite. It provides a Rust gRPC
+server with PostgreSQL-backed Cache, MQ, and Config Center services, plus Rust,
+Go, Python, and TypeScript SDKs generated from shared protobuf contracts.
 
 The MQ implementation uses owned PostgreSQL tables, transactions, indexes, and
 `FOR UPDATE SKIP LOCKED`. It does not depend on PGMQ.
@@ -10,7 +10,7 @@ The MQ implementation uses owned PostgreSQL tables, transactions, indexes, and
 ## Architecture
 
 ```text
-Rust / Go / Python SDKs
+Rust / Go / Python / TypeScript SDKs
         |
         | gRPC
         v
@@ -27,26 +27,33 @@ PostgreSQL
   - cache_namespaces / cache_entries / cache_stats
   - mq_queues / mq_messages / mq_archives
   - config_scopes / config_items / config_releases
-  - admin_log_events
+  - admin_log_events / pgapp_clients
 ```
 
 ## Features
 
 - Cache: namespace-scoped key/value storage, TTL, batch get, exact delete,
-  namespace invalidation, logical capacity limits, LRU eviction, and stats.
+  namespace invalidation, logical capacity limits, LRU eviction, stats, and
+  single-key atomic operations (`Increment`, `Decrement`, `SetNX`, `GetSet`,
+  `Append`, `Prepend`).
 - MQ: queue lifecycle, JSON message production, batch send, delayed delivery,
   visibility timeout, long polling, per-delivery `ack_token` confirmation,
-  archive acknowledgement, token-scoped visibility extension, and queue metrics.
+  archive acknowledgement, token-scoped visibility extension, PostgreSQL
+  LISTEN/NOTIFY push, server-streaming `StreamRead`, DLQ inspection and
+  reprocessing, and queue metrics.
 - Config Center: Apollo-like `app_id/environment/cluster/namespace` scopes,
   draft `key -> JSON value` items, immutable published release snapshots,
-  checksums, release history, and unary long-poll change detection.
+  optional per-scope JSON Schema validation, checksums, release history, and
+  unary long-poll change detection.
 - Server runtime: configurable PostgreSQL pool, service toggles, request
-  limits, default request timeout, health/readiness checks, and runtime metrics.
+  limits, default request timeout, optional gRPC key+secret authentication,
+  health/readiness checks, and runtime metrics.
 - Admin UI: React + Vite operations console with token-protected Admin HTTP
   API, persisted PostgreSQL logs, Cache/MQ inspection, Config Center
-  draft/publish workflows, and client activity views.
-- SDKs: idiomatic Rust, Go, and Python clients for the phase-one Cache, MQ, and
-  Config Center APIs.
+  draft/publish/schema workflows, DLQ inspection, and client credential
+  management.
+- SDKs: idiomatic Rust, Go, Python, and TypeScript clients for the Cache, MQ,
+  and Config Center APIs.
 
 ## Docker Compose Deployment
 
@@ -113,14 +120,19 @@ PGAPP_MIN_CONNECTIONS=1
 PGAPP_MAX_CONNECTIONS=20
 PGAPP_ENABLE_CACHE=true
 PGAPP_ENABLE_MQ=true
+PGAPP_ENABLE_NOTIFY=true
+PGAPP_ENABLE_AUTH=false
 PGAPP_MAX_BATCH_SIZE=100
 PGAPP_MAX_PAYLOAD_BYTES=1048576
 PGAPP_MAX_VISIBILITY_TIMEOUT_SECONDS=43200
+PGAPP_MAX_REDELIVERY_COUNT=0
+PGAPP_DLQ_RETENTION_DAYS=0
 PGAPP_DEFAULT_TIMEOUT_SECONDS=30
 PGAPP_CACHE_MAX_KEYS=100000
 PGAPP_CACHE_MAX_BYTES=1073741824
 PGAPP_ENABLE_CONFIG=true
 PGAPP_MAX_CONFIG_WATCH_SECONDS=30
+PGAPP_MAX_SCHEMA_BYTES=262144
 PGAPP_ENABLE_ADMIN=false
 PGAPP_ADMIN_BIND_ADDR=127.0.0.1:8080
 PGAPP_ADMIN_TOKEN=change-me
@@ -130,11 +142,16 @@ PGAPP_ADMIN_MAX_PAGE_SIZE=100
 Omit `PGAPP_CACHE_MAX_KEYS` or `PGAPP_CACHE_MAX_BYTES` for unbounded logical
 cache limits.
 
+When `PGAPP_ENABLE_AUTH=true`, gRPC requests must include `x-pgapp-key` and
+`x-pgapp-secret` metadata. Health and readiness checks remain unauthenticated.
+
 When `PGAPP_ENABLE_ADMIN=true`, `PGAPP_ADMIN_TOKEN` is required. The Admin API
-is read-only for Cache and MQ: it can inspect namespaces, entries, queues,
-messages, metrics, logs, and client activity, but it does not set/delete cache
-entries or send/ack/archive/set-visibility/purge/drop MQ messages. Config
-Center is managed through Admin HTTP/UI draft and publish workflows.
+is read-only for Cache and active MQ messages: it can inspect namespaces,
+entries, queues, messages, metrics, logs, and client activity, but it does not
+set/delete cache entries or send/ack/archive/set-visibility/drop active MQ
+messages. It can inspect, reprocess, and purge DLQ entries, manage Config
+Center drafts/releases/schemas, and create/rotate/deactivate gRPC client
+credentials.
 
 Run the Admin UI during development without Docker:
 
@@ -149,15 +166,40 @@ token handling, and read-only limitations.
 
 ## SDK Quick Start
 
+Install the Python SDK with `uv`:
+
+```sh
+uv venv --python /opt/homebrew/bin/python3
+uv pip install ./sdk/python
+```
+
+For SDK development:
+
+```sh
+cd sdk/python
+uv sync --group dev --python /opt/homebrew/bin/python3
+uv run python -m unittest discover -s tests
+```
+
+After installation, applications can import `pgapp_sdk` and the generated
+`pgapp.v1` protobuf modules without setting `PYTHONPATH`.
+
 Python:
 
 ```python
 from pgapp_sdk import PGAppClient
 
-client = PGAppClient("127.0.0.1:50051", timeout=5)
+client = PGAppClient(
+    "127.0.0.1:50051",
+    timeout=5,
+    key="svc-billing",
+    secret="secret",
+)
 
 client.cache.set("default", "hello", b"world", ttl_seconds=60)
 assert client.cache.get("default", "hello") == b"world"
+assert client.cache.increment("default", "counter", 1, ttl_seconds=60) == 1
+assert client.cache.set_nx("default", "lock", b"1", ttl_seconds=30)
 
 client.mq.create_queue("orders")
 message_id = client.mq.send_json("orders", {"order_id": 123})
@@ -165,6 +207,12 @@ messages = client.mq.read("orders", quantity=1, visibility_timeout_seconds=30)
 
 message = messages[0]
 client.mq.ack("orders", message.message_id, message.ack_token)
+
+stream_message_id = client.mq.send_json("orders", {"stream": True})
+for streamed in client.mq.stream_read("orders", quantity=1, visibility_timeout_seconds=30):
+    assert streamed.message_id == stream_message_id
+    print(streamed.payload)
+    break
 
 scope = client.config.scope("billing", "prod", "default", "application")
 release = client.config.get_latest_release(scope)
@@ -179,10 +227,18 @@ use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = PgAppClient::connect("http://127.0.0.1:50051").await?;
+    let client = PgAppClient::connect_with_timeout_and_credentials(
+        "http://127.0.0.1:50051",
+        Some(std::time::Duration::from_secs(5)),
+        "svc-billing",
+        "secret",
+    )
+    .await?;
 
     let mut cache = client.cache();
     cache.set("default", "hello", b"world".to_vec(), Some(60)).await?;
+    cache.increment("default", "counter", 1, Some(60)).await?;
+    cache.set_nx("default", "lock", b"1".to_vec(), Some(30)).await?;
 
     let mut mq = client.mq();
     mq.create_queue("orders").await?;
@@ -191,6 +247,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let message = &messages[0];
     assert_eq!(message.message_id, message_id);
     mq.ack("orders", message.message_id, &message.ack_token).await?;
+    let stream_message_id = mq.send_json("orders", &json!({"stream": true})).await?;
+    let mut stream = mq.stream_read("orders", 1, 30).await?;
+    if let Some(batch) = stream.message().await? {
+        assert_eq!(batch.messages[0].message_id, stream_message_id);
+    }
 
     let mut config = client.config();
     let scope = pgapp_sdk::ConfigClient::scope("billing", "prod", "default", "application");
@@ -254,6 +315,32 @@ func main() {
 }
 ```
 
+TypeScript:
+
+```ts
+import { PGAppClient } from "@pgapp/sdk";
+
+const client = new PGAppClient("127.0.0.1:50051", {
+  timeoutMs: 5000,
+  credentials: { key: "svc-billing", secret: "secret" }
+});
+
+await client.cache.set("default", "hello", "world", 60);
+await client.cache.increment("default", "counter", 1, 60);
+
+await client.mq.createQueue("orders");
+const id = await client.mq.sendJson("orders", { orderId: 123 });
+const messages = await client.mq.read("orders", 1, 30);
+await client.mq.ack("orders", id, messages[0].ackToken);
+
+const streamId = await client.mq.sendJson("orders", { stream: true });
+for await (const message of client.mq.streamRead("orders")) {
+  if (Number(message.messageId) !== streamId) continue;
+  console.log(message.jsonPayload);
+  break;
+}
+```
+
 ## Config Center Model
 
 Config Center stores draft JSON items under:
@@ -266,8 +353,10 @@ Draft changes are not visible to application clients. Publishing creates a
 complete immutable JSON snapshot with the next revision and checksum. Clients
 read latest or specific published revisions and can use unary long-poll watch:
 send a known revision and bounded timeout, receive either a newer release or a
-no-change response. The first version is not a secret manager and does not
-provide typed schemas, RBAC, gray release, or streaming.
+no-change response. Operators can attach a JSON Schema to a scope so draft
+upserts and publishes reject invalid JSON values before release. The first
+version is not a secret manager and does not provide RBAC, gray release, or
+streaming.
 
 ## MQ Acknowledgement Model
 
@@ -294,6 +383,15 @@ Only the token from the current in-flight delivery can mutate that delivery.
 If the handler needs more time, call `SetVisibilityTimeout` with the same
 `ack_token` before the timeout expires.
 
+## Dead Letter Queue
+
+When `PGAPP_MAX_REDELIVERY_COUNT` is greater than zero, a queue created by that
+server records the limit in PostgreSQL. On subsequent reads, messages whose
+`read_count` is at or above the queue limit move to `mq_dlq` instead of being
+returned to consumers. DLQ entries preserve the original message id, payload,
+read count, enqueue time, and reason. They can be listed, fetched, reprocessed
+back into the active queue, or purged through gRPC and Admin UI.
+
 ## Testing
 
 Run unit, integration, SDK, and type checks available in the current
@@ -319,7 +417,13 @@ openspec validate --specs --strict
 
 - [docs/local-deployment.md](docs/local-deployment.md)
 - [docs/admin-ui.md](docs/admin-ui.md)
+- [docs/config-center.md](docs/config-center.md)
 - [docs/mq-semantics.md](docs/mq-semantics.md)
+- [docs/auth.md](docs/auth.md)
+- [docs/dlq.md](docs/dlq.md)
+- [sdk/rust/README.md](sdk/rust/README.md)
+- [sdk/python/README.md](sdk/python/README.md)
+- [sdk/typescript/README.md](sdk/typescript/README.md)
 - [docs/limitations.md](docs/limitations.md)
 - [docs/schema-rollback.md](docs/schema-rollback.md)
 - [docs/tdd.md](docs/tdd.md)
